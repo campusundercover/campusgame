@@ -1,62 +1,27 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import useGameStore from '../../store/gameStore'
 
 const TYPE_ICONS = {
-  DIGITAL: '💻',
-  PHYSICAL: '📄',
-  TESTIMONIAL: '👁️',
+  DIGITAL: '🔌',
+  PHYSICAL: '🪪',
+  TESTIMONIAL: '💬',
   FABRICATED: '⚠️',
 }
 
 const TYPE_COLORS = {
-  DIGITAL: '#3b82f6',
-  PHYSICAL: '#f59e0b',
-  TESTIMONIAL: '#22c55e',
-  FABRICATED: '#ef4444',
+  DIGITAL: '#00BFFF',    // electric blue
+  PHYSICAL: '#FFD700',   // gold
+  TESTIMONIAL: '#90EE90',// light green
+  FABRICATED: '#FF6B6B', // alert red
 }
 
-function ReliabilityDots({ score }) {
+function ReliabilityStars({ score }) {
   const filled = Math.round(score * 5)
   return (
-    <span className="reliability-dots">
+    <div className="reliability-stars">
       {Array.from({ length: 5 }).map((_, i) => (
-        <span
-          key={i}
-          className={`reliability-dot ${i < filled ? 'filled' : ''}`}
-        />
+        <span key={i} className={`star ${i < filled ? 'filled' : ''}`}>★</span>
       ))}
-    </span>
-  )
-}
-
-function EvidenceCard({ item, isSelected, onSelect, onCorrelate, correlateMode }) {
-  const color = TYPE_COLORS[item.evidence_type] || '#8b5cf6'
-  return (
-    <div
-      className={`evidence-card ${isSelected ? 'selected' : ''} ${correlateMode ? 'correlate-mode' : ''}`}
-      style={{ '--ev-color': color }}
-      onClick={() => onSelect(item)}
-    >
-      <div className="evidence-card-header">
-        <span className="evidence-type-icon">{TYPE_ICONS[item.evidence_type]}</span>
-        <div>
-          <p className="evidence-type-label">{item.evidence_type}</p>
-          <p className="evidence-area">{item.area_found}</p>
-        </div>
-        <ReliabilityDots score={item.reliability_score} />
-      </div>
-      <p className="evidence-description">{item.description}</p>
-      <div className="evidence-card-footer">
-        <span className="evidence-points-to">→ {item.points_to_player_id || 'Unknown'}</span>
-        {correlateMode && (
-          <button
-            className="correlate-link-btn"
-            onClick={(e) => { e.stopPropagation(); onCorrelate(item) }}
-          >
-            Link
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -65,113 +30,545 @@ export default function EvidenceBoard() {
   const evidenceBoard = useGameStore((s) => s.evidenceBoard)
   const correlations = useGameStore((s) => s.correlations)
   const addCorrelation = useGameStore((s) => s.addCorrelation)
+  const ws = useGameStore((s) => s.ws)
   const role = useGameStore((s) => s.role)
 
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState(null)
+  const [positions, setPositions] = useState({})
+  const [draggedId, setDraggedId] = useState(null)
   const [correlateMode, setCorrelateMode] = useState(false)
   const [correlateFrom, setCorrelateFrom] = useState(null)
-  const [filterType, setFilterType] = useState('ALL')
+  const [selectedYarn, setSelectedYarn] = useState(null)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const containerRef = useRef(null)
+
+  // Initialize random positions for new evidence cards on the corkboard
+  useEffect(() => {
+    if (!isOpen) return
+    setPositions(prev => {
+      const next = { ...prev }
+      let updated = false
+      evidenceBoard.forEach((item, index) => {
+        if (!next[item.evidence_id]) {
+          const angle = (index / Math.max(1, evidenceBoard.length)) * Math.PI * 2
+          const radiusX = window.innerWidth * 0.25
+          const radiusY = window.innerHeight * 0.20
+          next[item.evidence_id] = {
+            x: window.innerWidth * 0.45 + Math.cos(angle) * radiusX - 95,
+            y: window.innerHeight * 0.45 + Math.sin(angle) * radiusY - 70
+          }
+          updated = true
+        }
+      })
+      return updated ? next : prev
+    })
+  }, [evidenceBoard, isOpen])
 
   if (role !== 'DETECTIVE') return null
 
-  const filtered = filterType === 'ALL'
-    ? evidenceBoard
-    : evidenceBoard.filter(e => e.evidence_type === filterType)
-
-  const handleSelect = (item) => {
-    if (correlateMode && correlateFrom) {
-      if (correlateFrom.evidence_id !== item.evidence_id) {
-        addCorrelation(correlateFrom.evidence_id, item.evidence_id)
-      }
-      setCorrelateFrom(null)
-      setCorrelateMode(false)
-    } else {
-      setSelectedItem(item === selectedItem ? null : item)
+  // Dragging handlers
+  const handleMouseDown = (e, id) => {
+    if (e.target.tagName === 'BUTTON' || e.target.className.includes('link-btn')) return
+    setDraggedId(id)
+    const pos = positions[id] || { x: 100, y: 100 }
+    dragOffset.current = {
+      x: e.clientX - pos.x,
+      y: e.clientY - pos.y
     }
   }
 
-  const handleCorrelate = (item) => {
+  const handleMouseMove = (e) => {
+    if (!draggedId) return
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    
+    // Constraint within board boundaries
+    const targetX = Math.max(10, Math.min(rect.width - 210, e.clientX - dragOffset.current.x))
+    const targetY = Math.max(70, Math.min(rect.height - 180, e.clientY - dragOffset.current.y))
+
+    setPositions(prev => ({
+      ...prev,
+      [draggedId]: { x: targetX, y: targetY }
+    }))
+  }
+
+  const handleMouseUp = () => {
+    setDraggedId(null)
+  }
+
+  useEffect(() => {
+    if (draggedId) {
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [draggedId])
+
+  const handleCardClick = (item) => {
+    if (correlateMode && correlateFrom) {
+      if (correlateFrom.evidence_id !== item.evidence_id) {
+        // Trigger server-authoritative correlation check using USE_ABILITY
+        if (ws) {
+          ws.send(JSON.stringify({
+            action: 'USE_ABILITY',
+            ability_id: 'CORRELATE_EVIDENCE',
+            evidence_id_a: correlateFrom.evidence_id,
+            evidence_id_b: item.evidence_id
+          }))
+        } else {
+          // Offline fallback
+          addCorrelation(correlateFrom.evidence_id, item.evidence_id, {
+            correlated: true,
+            correlation_strength: 0.85,
+            fabrication_warning: false,
+            correlation_note: 'Apparent connection.'
+          })
+        }
+      }
+      setCorrelateFrom(null)
+      setCorrelateMode(false)
+    }
+  }
+
+  const startCorrelate = (item) => {
     setCorrelateFrom(item)
     setCorrelateMode(true)
   }
 
   return (
     <>
-      {/* Toggle button */}
+      {/* HUD Board Button */}
       <button
         id="evidence-board-toggle"
         className={`evidence-board-toggle ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
-        title="Evidence Board (Detective Only)"
+        title="Open Case Board (Detective Only)"
       >
-        🗂️
+        📌
         {evidenceBoard.length > 0 && (
-          <span className="evidence-count-badge">{evidenceBoard.length}</span>
+          <span className="evidence-badge-num">{evidenceBoard.length}</span>
         )}
       </button>
 
-      {/* Panel */}
+      {/* Full-Screen Detective Corkboard */}
       {isOpen && (
-        <div className="evidence-board-panel" id="evidence-board-panel">
-          <div className="evidence-board-header">
-            <h3>🗂️ Evidence Board</h3>
-            <span className="evidence-total">{evidenceBoard.length} items</span>
-            <button className="panel-close-btn" onClick={() => setIsOpen(false)}>✕</button>
+        <div className="corkboard-screen-overlay" ref={containerRef}>
+          {/* Header */}
+          <div className="corkboard-header">
+            <div className="header-left">
+              <h2>📌 CASE INVESTIGATION BOARD</h2>
+              <span className="badge">DETECTIVE AUTHORIZED</span>
+            </div>
+            <div className="header-right">
+              {correlateMode && (
+                <div className="correlation-alert animate-pulse">
+                  LINKING MODE: Choose another card to connect with yarn string
+                  <button className="cancel-btn" onClick={() => { setCorrelateMode(false); setCorrelateFrom(null) }}>Cancel</button>
+                </div>
+              )}
+              <button className="close-corkboard-btn" onClick={() => setIsOpen(false)}>✕ CLOSE BOARD</button>
+            </div>
           </div>
 
-          {/* Filters */}
-          <div className="evidence-filters">
-            {['ALL', 'DIGITAL', 'PHYSICAL', 'TESTIMONIAL', 'FABRICATED'].map(f => (
-              <button
-                key={f}
-                className={`filter-btn ${filterType === f ? 'active' : ''}`}
-                onClick={() => setFilterType(f)}
-              >
-                {f === 'ALL' ? 'All' : TYPE_ICONS[f]}
-              </button>
-            ))}
-          </div>
+          {/* SVG Yarn strings */}
+          <svg className="corkboard-svg-yarn">
+            {correlations.map(([idA, idB, meta], i) => {
+              const posA = positions[idA]
+              const posB = positions[idB]
+              if (!posA || !posB) return null
 
-          {/* Correlations indicator */}
-          {correlations.length > 0 && (
-            <div className="correlations-info">
-              🔗 {correlations.length} correlation{correlations.length !== 1 ? 's' : ''} made
-            </div>
-          )}
+              const cx1 = posA.x + 95
+              const cy1 = posA.y + 75
+              const cx2 = posB.x + 95
+              const cy2 = posB.y + 75
 
-          {correlateMode && (
-            <div className="correlate-prompt">
-              Select an item to link with <strong>{correlateFrom?.evidence_type}</strong>
-              <button onClick={() => { setCorrelateMode(false); setCorrelateFrom(null) }}>Cancel</button>
-            </div>
-          )}
+              const isSelected = selectedYarn === i
 
-          {/* Evidence list */}
-          <div className="evidence-list">
-            {filtered.length === 0 && (
-              <p className="evidence-empty">No evidence collected yet. Explore campus areas.</p>
-            )}
-            {filtered.map(item => (
-              <EvidenceCard
+              return (
+                <g key={i} onClick={() => setSelectedYarn(isSelected ? null : i)}>
+                  {/* Outer shadow for depth */}
+                  <line
+                    x1={cx1} y1={cy1} x2={cx2} y2={cy2}
+                    stroke="rgba(0,0,0,0.5)"
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                  />
+                  {/* Crimson yarn */}
+                  <line
+                    x1={cx1} y1={cy1} x2={cx2} y2={cy2}
+                    stroke={isSelected ? '#f59e0b' : '#b22222'}
+                    strokeWidth={isSelected ? '6' : '4.5'}
+                    strokeLinecap="round"
+                    className="yarn-line-draw"
+                  />
+                  {/* Star intersection dot */}
+                  <circle cx={(cx1+cx2)/2} cy={(cy1+cy2)/2} r="4" fill="#fed7aa" />
+                </g>
+              )
+            })}
+          </svg>
+
+          {/* Draggable Cards */}
+          {evidenceBoard.map(item => {
+            const pos = positions[item.evidence_id] || { x: 100, y: 100 }
+            const isCorrelatingSource = correlateFrom?.evidence_id === item.evidence_id
+            const canBeLinkedTarget = correlateMode && correlateFrom?.evidence_id !== item.evidence_id
+            const evColor = TYPE_COLORS[item.evidence_type] || '#fff'
+
+            return (
+              <div
                 key={item.evidence_id}
-                item={item}
-                isSelected={selectedItem?.evidence_id === item.evidence_id}
-                onSelect={handleSelect}
-                onCorrelate={handleCorrelate}
-                correlateMode={correlateMode && correlateFrom?.evidence_id !== item.evidence_id}
-              />
-            ))}
-          </div>
+                className={`corkboard-card ${isCorrelatingSource ? 'source-linking' : ''} ${canBeLinkedTarget ? 'target-linkable' : ''}`}
+                style={{
+                  transform: `translate(${pos.x}px, ${pos.y}px)`,
+                  '--ev-color': evColor
+                }}
+                onMouseDown={(e) => handleMouseDown(e, item.evidence_id)}
+                onClick={() => handleCardClick(item)}
+              >
+                {/* Push Pin */}
+                <div className="card-pin">📌</div>
 
-          {!correlateMode && evidenceBoard.length >= 2 && (
-            <button
-              className="correlate-start-btn"
-              onClick={() => setCorrelateMode(true)}
-            >
-              🔗 Correlate Evidence
-            </button>
+                {/* Card body */}
+                <div className="card-inner">
+                  <div className="card-meta">
+                    <span className="type-icon">{TYPE_ICONS[item.evidence_type]}</span>
+                    <div>
+                      <div className="type-label">{item.evidence_type}</div>
+                      <div className="area-label">{item.area_found || item.area}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="card-desc">
+                    {item.description || item.template_data?.description || 'Collected clue file.'}
+                  </div>
+
+                  <div className="card-footer">
+                    <div className="target-label">
+                      Points to: <strong>{item.points_to_player_id || 'Neutral'}</strong>
+                    </div>
+                    
+                    <div className="stars-row">
+                      <ReliabilityStars score={item.reliability_score ?? 0.8} />
+                    </div>
+
+                    {!correlateMode && (
+                      <button className="link-btn" onClick={() => startCorrelate(item)}>
+                        🔗 Link
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Yarn Connection Details Tooltip Panel */}
+          {selectedYarn !== null && correlations[selectedYarn] && (
+            <div className="yarn-details-panel">
+              <h4>🔗 Evidence Link Evaluation</h4>
+              {correlations[selectedYarn][2] ? (
+                <>
+                  <p><strong>Note:</strong> {correlations[selectedYarn][2].correlation_note}</p>
+                  <p><strong>Link Confidence:</strong> {(correlations[selectedYarn][2].correlation_strength * 100).toFixed(0)}%</p>
+                  {correlations[selectedYarn][2].fabrication_warning && (
+                    <p className="warning-text">⚠️ Warning: Suspicion of falsified evidence detected!</p>
+                  )}
+                </>
+              ) : (
+                <p>Establishing link metrics... (Waiting for server confirmation)</p>
+              )}
+              <button onClick={() => setSelectedYarn(null)}>Dismiss</button>
+            </div>
           )}
+
+          {/* Internal Corkboard styling */}
+          <style>{`
+            .corkboard-screen-overlay {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100vw;
+              height: 100vh;
+              z-index: 9999;
+              background-color: #241910;
+              background-image: 
+                radial-gradient(rgba(0,0,0,0.15) 15%, transparent 16%),
+                radial-gradient(rgba(0,0,0,0.15) 15%, transparent 16%);
+              background-size: 60px 60px;
+              background-position: 0 0, 30px 30px;
+              box-shadow: inset 0 0 100px rgba(0,0,0,0.85);
+              overflow: hidden;
+              user-select: none;
+            }
+
+            .corkboard-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 15px 30px;
+              background: rgba(10, 8, 5, 0.88);
+              border-bottom: 2px solid #3b2a1a;
+              color: #f5d0a9;
+              font-family: 'JetBrains Mono', monospace;
+            }
+
+            .corkboard-header h2 {
+              margin: 0;
+              font-size: 20px;
+              letter-spacing: 1px;
+            }
+
+            .header-left {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+
+            .header-left .badge {
+              font-size: 11px;
+              background: #b22222;
+              color: white;
+              padding: 2px 8px;
+              border-radius: 3px;
+              font-weight: bold;
+            }
+
+            .close-corkboard-btn {
+              background: #3b2a1a;
+              color: #f5d0a9;
+              border: 1px solid #5c402b;
+              padding: 8px 16px;
+              cursor: pointer;
+              font-family: inherit;
+              font-weight: bold;
+              transition: all 0.2s;
+            }
+
+            .close-corkboard-btn:hover {
+              background: #b22222;
+              color: white;
+              border-color: #ef4444;
+            }
+
+            .corkboard-svg-yarn {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              pointer-events: stroke;
+            }
+
+            .yarn-line-draw {
+              transition: stroke 0.2s;
+              cursor: pointer;
+            }
+            .yarn-line-draw:hover {
+              stroke: #f59e0b !important;
+              stroke-width: 6.5px !important;
+            }
+
+            .corkboard-card {
+              position: absolute;
+              width: 200px;
+              background: #fbf0d9;
+              border: 1px solid #dcd0b9;
+              box-shadow: 3px 5px 15px rgba(0,0,0,0.45);
+              border-radius: 4px;
+              cursor: grab;
+              z-index: 10;
+              padding: 10px;
+              font-family: 'Inter', sans-serif;
+              color: #2b1f14;
+            }
+
+            .corkboard-card:active {
+              cursor: grabbing;
+              z-index: 50;
+              box-shadow: 5px 10px 25px rgba(0,0,0,0.55);
+            }
+
+            .card-pin {
+              position: absolute;
+              top: -12px;
+              left: 50%;
+              transform: translateX(-50%);
+              font-size: 20px;
+              filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4));
+              pointer-events: none;
+            }
+
+            .card-inner {
+              border-top: 3px solid var(--ev-color);
+              padding-top: 8px;
+            }
+
+            .card-meta {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin-bottom: 8px;
+            }
+
+            .type-icon {
+              font-size: 22px;
+            }
+
+            .type-label {
+              font-size: 11px;
+              font-weight: bold;
+              text-transform: uppercase;
+              color: #5c4d3c;
+              letter-spacing: 0.5px;
+            }
+
+            .area-label {
+              font-size: 10px;
+              color: #8c7d6c;
+            }
+
+            .card-desc {
+              font-size: 11.5px;
+              line-height: 1.4;
+              height: 52px;
+              overflow-y: auto;
+              margin-bottom: 8px;
+              background: rgba(255,255,255,0.4);
+              padding: 4px;
+              border-radius: 2px;
+              border-left: 2px solid #5c4d3c;
+            }
+
+            .card-footer {
+              display: flex;
+              flex-direction: column;
+              gap: 5px;
+              border-top: 1px dashed #dcd0b9;
+              padding-top: 6px;
+            }
+
+            .target-label {
+              font-size: 10.5px;
+              color: #4a3c2c;
+            }
+
+            .stars-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+
+            .reliability-stars {
+              color: #dcd0b9;
+              font-size: 13px;
+              letter-spacing: -1px;
+            }
+
+            .reliability-stars .star.filled {
+              color: #f59e0b;
+            }
+
+            .link-btn {
+              background: #5c4d3c;
+              color: white;
+              border: none;
+              padding: 3px 8px;
+              font-size: 10.5px;
+              cursor: pointer;
+              border-radius: 2px;
+              align-self: flex-end;
+            }
+
+            .link-btn:hover {
+              background: #b22222;
+            }
+
+            .source-linking {
+              border-color: #ef4444 !important;
+              box-shadow: 0 0 15px #ef4444;
+            }
+
+            .target-linkable {
+              cursor: pointer !important;
+              animation: link-pulse 1.5s infinite;
+            }
+
+            @keyframes link-pulse {
+              0% { box-shadow: 0 0 5px #22c55e; }
+              50% { box-shadow: 0 0 15px #22c55e; }
+              100% { box-shadow: 0 0 5px #22c55e; }
+            }
+
+            .correlation-alert {
+              background: #b22222;
+              color: white;
+              padding: 6px 12px;
+              font-size: 12px;
+              border-radius: 3px;
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+              font-family: sans-serif;
+            }
+
+            .cancel-btn {
+              background: white;
+              color: #b22222;
+              border: none;
+              padding: 2px 6px;
+              cursor: pointer;
+              font-size: 11px;
+              font-weight: bold;
+            }
+
+            .yarn-details-panel {
+              position: absolute;
+              bottom: 30px;
+              left: 30px;
+              width: 280px;
+              background: rgba(10, 8, 5, 0.92);
+              border: 1.5px solid #d59e0b;
+              border-radius: 4px;
+              padding: 15px;
+              color: #f5d0a9;
+              font-family: 'JetBrains Mono', monospace;
+              box-shadow: 0 10px 25px rgba(0,0,0,0.65);
+              z-index: 100;
+            }
+
+            .yarn-details-panel h4 {
+              margin-top: 0;
+              color: #f59e0b;
+              border-bottom: 1px solid #3b2a1a;
+              padding-bottom: 6px;
+            }
+
+            .yarn-details-panel p {
+              font-size: 11.5px;
+              margin: 6px 0;
+              line-height: 1.4;
+            }
+
+            .yarn-details-panel .warning-text {
+              color: #ef4444;
+              font-weight: bold;
+            }
+
+            .yarn-details-panel button {
+              margin-top: 10px;
+              background: #3b2a1a;
+              color: #f5d0a9;
+              border: 1px solid #5c402b;
+              padding: 4px 10px;
+              font-size: 11px;
+              cursor: pointer;
+            }
+          `}</style>
         </div>
       )}
     </>

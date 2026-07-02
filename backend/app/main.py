@@ -13,6 +13,8 @@ from app.game.npc_manager import npc_manager
 from app.game.ability_manager import ability_manager
 from app.game.meeting_manager import meeting_manager
 from app.game.resolution_service import resolve_game
+from app.game.cctv_service import get_or_create_cctv_engine, cleanup_cctv_engine
+from app.game.correlation_engine import correlation_engine
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -141,12 +143,16 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                 if room.host_id != p_id:
                     continue
                 players = list(room.players.keys())
+                # If less than 4 players, add bot/dummy players to fulfill role requirements
                 if len(players) < 4:
-                    await send_to_player(room_code, p_id, {
-                        "type": "ERROR",
-                        "payload": {"message": "Need at least 4 players to start."}
-                    })
-                    continue
+                    dummy_count = 1
+                    while len(players) < 4:
+                        dummy_id = 9000 + dummy_count
+                        dummy_name = f"Bot_{dummy_count}"
+                        room.players[dummy_id] = PlayerLobbyState(dummy_id, dummy_name)
+                        room.players[dummy_id].is_ready = True
+                        players.append(dummy_id)
+                        dummy_count += 1
 
                 # Assign roles
                 player_ids_str = [str(pid) for pid in players]
@@ -171,6 +177,11 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                 )
                 task_manager.assign_tasks_for_room(room_code, result['assignments'])
                 ability_manager.assign_abilities(room_code, result['assignments'], difficulty=room.difficulty)
+
+                # Initialise CCTV engine and assign colors for this room
+                cctv = get_or_create_cctv_engine(room_code)
+                for pid_str in player_ids_str:
+                    cctv.assign_player_color(pid_str)
 
                 # Update lobby status
                 room.status = "playing"
@@ -197,6 +208,25 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                         "timer_seconds": result['modifiers']['timer_seconds'],
                     }
                 })
+
+                # Send each player their personalized GAME_STATE
+                all_evidence_public = [
+                    e.to_dict() for e in evidence_manager.get_room_evidence(room_code)
+                    if not e.is_destroyed
+                ]
+                for pid_str2, role2 in result['assignments'].items():
+                    pid_int2 = int(pid_str2)
+                    player_tasks = task_manager.get_player_tasks(room_code, pid_str2)
+                    player_abilities = ability_manager.get_player_abilities(room_code, pid_str2)
+                    await send_to_player(room_code, pid_int2, {
+                        "type": "GAME_STATE",
+                        "payload": {
+                            "tasks": player_tasks,
+                            "abilities": player_abilities,
+                            "evidence": all_evidence_public,
+                            "role": role2,
+                        }
+                    })
 
     except WebSocketDisconnect:
         lobby_manager.leave_room(room_code, p_id)
@@ -256,13 +286,33 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             pid_str = str(p_id)
 
             # ── Position update (broadcast to all) ──
-            if action == "POSITION_UPDATE":
+            if action == "POSITION_UPDATE" or action == "PLAYER_MOVE":
+                pos = data.get("position")
+                rot = data.get("rotation")
+                area = data.get("area", "Unknown")
+
+                if gs:
+                    if not hasattr(gs, 'player_positions'):
+                        gs.player_positions = {}
+                    if pid_str not in gs.player_positions:
+                        gs.player_positions[pid_str] = {
+                            'position': pos,
+                            'rotation': rot,
+                            'area': area,
+                            'durations': {}
+                        }
+                    else:
+                        gs.player_positions[pid_str]['position'] = pos
+                        gs.player_positions[pid_str]['rotation'] = rot
+                        gs.player_positions[pid_str]['area'] = area
+
                 await broadcast_to_room(room_code, {
                     "type": "PLAYER_MOVED",
                     "payload": {
                         "player_id": pid_str,
-                        "position": data.get("position"),
-                        "rotation": data.get("rotation"),
+                        "position": pos,
+                        "rotation": rot,
+                        "area": area
                     }
                 })
 
@@ -271,6 +321,8 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                 ev_id = data.get("evidence_id")
                 item = evidence_manager.collect_evidence(room_code, ev_id, pid_str)
                 if item:
+                    # Log action for NPC observation system
+                    npc_manager.log_player_action(room_code, pid_str, 'EVIDENCE_COLLECTED', item.area)
                     await broadcast_to_room(room_code, {
                         "type": "EVIDENCE_COLLECTED",
                         "payload": {"evidence": item.to_dict(), "collector_id": pid_str}
@@ -285,6 +337,16 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "payload": {"board": evidence_manager.get_detective_board(room_code)}
                         })
 
+            # ── CCTV movement recording (called by client every 5s) ──
+            elif action == "RECORD_MOVEMENT":
+                cctv = get_or_create_cctv_engine(room_code)
+                cctv.record_movement(
+                    player_id=pid_str,
+                    position=data.get("position", {}),
+                    area=data.get("area", "Unknown"),
+                    game_timestamp=gs.elapsed_seconds,
+                )
+
             # ── Use ability ──
             elif action == "USE_ABILITY":
                 ability_id = data.get("ability_id")
@@ -295,22 +357,59 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                 result = ability_manager.use_ability(room_code, pid_str, ability_id)
                 if result and result['success']:
 
+                    # CCTV Analysis — Detective exclusive
+                    if ability_id == "CCTV_ANALYSIS":
+                        area = target_area or "Security Office"
+                        cctv = get_or_create_cctv_engine(room_code)
+                        report = cctv.generate_cctv_report(
+                            requested_area=area,
+                            time_window_minutes=5,
+                            current_game_time=gs.elapsed_seconds,
+                        )
+                        await send_to_player(room_code, p_id, {
+                            "type": "CCTV_REPORT",
+                            "payload": report
+                        })
+
+                    # Correlate Evidence — Detective exclusive
+                    elif ability_id == "CORRELATE_EVIDENCE":
+                        ev_id_a = data.get("evidence_id_a")
+                        ev_id_b = data.get("evidence_id_b")
+                        all_ev = evidence_manager.get_room_evidence(room_code)
+                        ev_a = next((e for e in all_ev if e.evidence_id == ev_id_a), None)
+                        ev_b = next((e for e in all_ev if e.evidence_id == ev_id_b), None)
+                        if ev_a and ev_b:
+                            corr = correlation_engine.evaluate_correlation(
+                                ev_a.to_dict(include_hidden=True),
+                                ev_b.to_dict(include_hidden=True),
+                                difficulty=room.difficulty,
+                            )
+                            await send_to_player(room_code, p_id, {
+                                "type": "CORRELATION_RESULT",
+                                "payload": {**corr, "evidence_id_a": ev_id_a, "evidence_id_b": ev_id_b}
+                            })
+
                     # Handle ability-specific effects
-                    if ability_id == "PLANT_FAKE_EVIDENCE":
+                    elif ability_id == "PLANT_FAKE_EVIDENCE":
                         item = evidence_manager.plant_fake_evidence(
                             room_code, target_area or "Main Block",
                             target_player or "", gs.elapsed_seconds
                         )
                         if item:
+                            npc_manager.log_player_action(room_code, pid_str, 'PLANT_FAKE_EVIDENCE', target_area or "Main Block")
                             await broadcast_to_room(room_code, {
                                 "type": "EVIDENCE_APPEARED",
                                 "payload": {"evidence": item.to_dict()}
-                            })
+                              })
 
                     elif ability_id == "DESTROY_EVIDENCE":
                         ev_id = data.get("evidence_id")
+                        all_ev = evidence_manager.get_room_evidence(room_code)
+                        ev_item = next((e for e in all_ev if e.evidence_id == ev_id), None)
+                        area_name = ev_item.area if ev_item else "Unknown"
                         destroyed = evidence_manager.destroy_evidence(room_code, ev_id)
                         if destroyed:
+                            npc_manager.log_player_action(room_code, pid_str, 'EVIDENCE_DESTROYED', area_name)
                             await broadcast_to_room(room_code, {
                                 "type": "EVIDENCE_DESTROYED",
                                 "payload": {"evidence_id": ev_id}
@@ -327,6 +426,10 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
 
                     elif ability_id == "MANIPULATE_NPC":
                         npc_manager.prime_npc(room_code, target_npc, pid_str, target_player or "")
+                        # Log action
+                        npc_item = next((n for n in npc_manager.room_npcs.get(room_code, []) if n.npc_id == target_npc), None)
+                        area_name = npc_item.area if npc_item else "Unknown"
+                        npc_manager.log_player_action(room_code, pid_str, 'MANIPULATE_NPC', area_name)
 
                     elif ability_id == "FRAME_PLAYER":
                         # Generate fake testimonial evidence
@@ -337,6 +440,8 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                         if item:
                             # Secretly add to board, appears as testimonial
                             item.evidence_type = "TESTIMONIAL"
+                            # Log action
+                            npc_manager.log_player_action(room_code, pid_str, 'PLANT_FAKE_EVIDENCE', 'Research Center')
                             detective_id = next(
                                 (int(pid) for pid, role in gs.assignments.items() if role == 'DETECTIVE'), None
                             )
@@ -454,6 +559,32 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             # ── Midpoint meeting check ──
             elif action == "TIMER_TICK":
                 elapsed = gs.elapsed_seconds
+
+                # Update player area durations (for Research Center presence check)
+                if gs and hasattr(gs, 'player_positions'):
+                    for p_pid, pstate in gs.player_positions.items():
+                        c_area = pstate.get('area', 'Unknown')
+                        dur_dict = pstate.setdefault('durations', {})
+                        dur_dict[c_area] = dur_dict.get(c_area, 0) + 1
+
+                # Tick NPCs
+                npc_manager.tick_npc_movements(room_code, dt=1.0)
+
+                # Broadcast updated NPC positions
+                await broadcast_to_room(room_code, {
+                    "type": "NPC_POSITIONS",
+                    "payload": {
+                        "npcs": npc_manager.get_room_npcs(room_code)
+                    }
+                })
+
+                # Check observations every 10 seconds
+                if gs and hasattr(gs, 'player_positions'):
+                    npc_manager.obs_tick_counters[room_code] = npc_manager.obs_tick_counters.get(room_code, 0) + 1
+                    if npc_manager.obs_tick_counters[room_code] >= 10:
+                        npc_manager.obs_tick_counters[room_code] = 0
+                        npc_manager.run_observation_check(room_code, gs.player_positions, elapsed)
+
                 if meeting_manager.check_midpoint(room_code, elapsed):
                     mtg = meeting_manager.start_meeting(room_code, "SYSTEM")
                     if mtg:
@@ -461,6 +592,15 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "type": "MEETING_STARTED",
                             "payload": {**mtg.to_dict(), "triggered_by": "MIDPOINT"}
                         })
+
+                # Timer expiry → move to accusation phase
+                timer_limit = gs.modifiers.get('timer_seconds', 1200)
+                if gs.is_active and elapsed >= timer_limit:
+                    gs.is_active = False
+                    await broadcast_to_room(room_code, {
+                        "type": "ACCUSATION_PHASE",
+                        "payload": {"reason": "TIME_EXPIRED", "elapsed": elapsed}
+                    })
 
             # ── Final Accusation ──
             elif action == "SUBMIT_ACCUSATION":
@@ -494,3 +634,9 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             "type": "PLAYER_DISCONNECTED",
             "payload": {"player_id": pid_str}
         })
+
+    finally:
+        # Clean up CCTV engine when all players disconnect
+        room = lobby_manager.get_room(room_code)
+        if room and not any(p.websocket for p in room.players.values()):
+            cleanup_cctv_engine(room_code)

@@ -24,14 +24,21 @@ const useGameStore = create((set, get) => ({
 
   // ── Campus Areas ──
   campusAreas: [
-    { id: 'research_center', name: 'Research Center', position: [-20, 0, -20], size: [12, 6, 10], color: '#4a1942' },
-    { id: 'computer_lab',    name: 'Computer Lab',    position: [0, 0, -20],   size: [12, 5, 10], color: '#1a1a4e' },
-    { id: 'security_office', name: 'Security Office', position: [20, 0, -20],  size: [10, 4, 8],  color: '#2d1b30' },
-    { id: 'mca_department',  name: 'MCA Department',  position: [-20, 0, 0],   size: [12, 5, 12], color: '#1b2d3a' },
-    { id: 'main_block',      name: 'Main Block',      position: [0, 0, 0],     size: [14, 7, 14], color: '#2a1a3a' },
-    { id: 'auditorium',      name: 'Auditorium',      position: [20, 0, 0],    size: [14, 8, 12], color: '#3a1a2a' },
-    { id: 'library',         name: 'Library',         position: [-20, 0, 20],  size: [12, 5, 10], color: '#1a3a2d' },
-    { id: 'cafeteria',       name: 'Cafeteria',        position: [0, 0, 20],   size: [12, 4, 10], color: '#3a2d1a' },
+    { id: 'front_gate',      name: 'Front Gate',      position: [0, 0, -42],  size: [14, 5, 4],   color: '#5a4a3a' },
+    { id: 'audi_block',      name: 'Auditorium',      position: [-28, 0, -28],size: [16, 9, 12],  color: '#7c3412' },
+    { id: 'junior_college',  name: 'Junior College',  position: [-28, 0, -14],size: [18, 6, 8],   color: '#7c2d12' },
+    { id: 'central_block',   name: 'Main Block',      position: [-10, 0, -8], size: [22, 12, 18], color: '#8a3412' },
+    { id: 'block_1',         name: 'Research Center', position: [28, 0, -20], size: [14, 8, 12],  color: '#3b1c57' },
+    { id: 'computer_lab',    name: 'Computer Lab',    position: [28, 0, 0],   size: [14, 7, 12],  color: '#1a1a4e' },
+    { id: 'canteen_right',   name: 'Cafeteria',       position: [32, 0, 16],  size: [10, 4, 8],   color: '#7c3d00' },
+    { id: 'block_2',         name: 'MCA Department',  position: [8, 0, 14],   size: [16, 8, 12],  color: '#7c3412' },
+    { id: 'security_office', name: 'Security Office', position: [-30, 0, 4],  size: [8, 4, 8],    color: '#2d2d2d' },
+    { id: 'library',         name: 'Library',         position: [-24, 0, 22], size: [14, 7, 10],  color: '#1a3a2d' },
+    { id: 'block_4',         name: 'Block 4',         position: [-10, 0, 30], size: [14, 7, 10],  color: '#7c3412' },
+    { id: 'she_block',       name: 'She Block',       position: [-28, 0, 34], size: [10, 5, 8],   color: '#7c185d' },
+    { id: 'rd_block',        name: 'R&D Block',       position: [-28, 0, 44], size: [12, 6, 8],   color: '#3b1c57' },
+    { id: 'girls_hostel',    name: 'Girls Hostel',    position: [6, 0, 40],   size: [18, 6, 8],   color: '#7c3412' },
+    { id: 'basketball_court',name: 'Basketball Court',position: [20, 0, -32], size: [16, 1, 12],  color: '#1d4ed8' },
   ],
   currentArea: null,
 
@@ -63,6 +70,9 @@ const useGameStore = create((set, get) => ({
   // ── Meeting ──
   meetingActive: false,
   meetingTimeRemaining: 90,
+
+  // ── CCTV Report ──
+  cctvReport: null,        // { area, movement_replay, generated_evidence } from server
 
   // ── Results ──
   gameResult: null,
@@ -96,7 +106,9 @@ const useGameStore = create((set, get) => ({
   addWorldEvidence: (item) => set((s) => ({ worldEvidence: [...s.worldEvidence, item] })),
   removeWorldEvidence: (id) => set((s) => ({ worldEvidence: s.worldEvidence.filter(e => e.evidence_id !== id) })),
   setEvidenceBoard: (board) => set({ evidenceBoard: board }),
-  addCorrelation: (a, b) => set((s) => ({ correlations: [...s.correlations, [a, b]] })),
+  addCorrelation: (a, b, data = null) => set((s) => ({
+    correlations: [...s.correlations.filter(c => !(c[0] === a && c[1] === b || c[0] === b && c[1] === a)), [a, b, data]]
+  })),
   incrementEvidenceCollected: () => set((s) => ({ evidenceCollectedCount: s.evidenceCollectedCount + 1 })),
 
   // Task actions
@@ -127,6 +139,9 @@ const useGameStore = create((set, get) => ({
   // Meeting actions
   setMeetingActive: (active) => set({ meetingActive: active }),
   setMeetingTimeRemaining: (t) => set({ meetingTimeRemaining: t }),
+
+  // CCTV report
+  setCctvReport: (report) => set({ cctvReport: report }),
 
   // Game result
   setGameResult: (result) => set({ gameResult: result, gamePhase: 'results' }),
