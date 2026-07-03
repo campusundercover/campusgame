@@ -266,6 +266,11 @@ class EvidenceManager:
     def get_room_evidence(self, room_code: str) -> List[EvidenceItem]:
         return self.room_evidence.get(room_code, [])
 
+    def get_player_collected_count(self, room_code: str, player_id: str) -> int:
+        pid_str = str(player_id)
+        items = self.room_evidence.get(room_code, [])
+        return sum(1 for item in items if item.is_collected and str(item.collected_by) == pid_str)
+
     def collect_evidence(self, room_code: str, evidence_id: str, collector_id: str) -> Optional[EvidenceItem]:
         items = self.room_evidence.get(room_code, [])
         for item in items:

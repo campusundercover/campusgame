@@ -561,7 +561,7 @@ function WaitingRoom({ auth, room: initialRoom, onGameStarted }) {
   useEffect(() => {
     if (!auth.token) return
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const wsUrl    = `${protocol}://${window.location.hostname}:8000/ws/lobby/${room.room_code}/${auth.userId}`
+    const wsUrl    = `${protocol}://${window.location.hostname}:8000/ws/lobby/${room.room_code}/${auth.userId}?token=${encodeURIComponent(auth.token)}`
     const ws       = new WebSocket(wsUrl)
     wsRef.current  = ws
 
@@ -728,6 +728,7 @@ export default function HomeScreen({ onPlay }) {
   const setRoomCode  = useGameStore((s) => s.setRoomCode)
   const setPlayerId  = useGameStore((s) => s.setPlayerId)
   const setPlayerName = useGameStore((s) => s.setPlayerName)
+  const setAuthToken = useGameStore((s) => s.setAuthToken)
 
   /* lobby flow state */
   const [flow,  setFlow]  = useState('auth')  // auth | lobby | waiting
@@ -738,23 +739,24 @@ export default function HomeScreen({ onPlay }) {
     setAuth(authData)
     setPlayerName(authData.username)
     setPlayerId(authData.userId)
+    setAuthToken(authData.token)
     /* Guest offline → go straight to play */
     if (!authData.token) { onPlay(); return }
     setFlow('lobby')
   }
 
-  const handleJoinedRoom = (roomData) => {
+  const handleJoinedRoom = useCallback((roomData) => {
     setRoom(roomData)
     setRoomCode(roomData.room_code)
     setFlow('waiting')
-  }
+  }, [setRoomCode])
 
-  const handleGameStarted = (roomCode, userId, username) => {
+  const handleGameStarted = useCallback((roomCode, userId, username) => {
     setRoomCode(roomCode)
     setPlayerId(userId)
     setPlayerName(username)
     onPlay()
-  }
+  }, [setRoomCode, setPlayerId, setPlayerName, onPlay])
 
   return (
     <div style={{

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 const useGameStore = create((set, get) => ({
   // ── Player State ──
-  playerPosition: [0, 0.5, 0],
+  playerPosition: [0, 0.5, -35],
   playerRotation: 0,
   playerSpeed: 4,
   sprintMultiplier: 1.8,
@@ -21,26 +21,38 @@ const useGameStore = create((set, get) => ({
   roomCode: null,
   playerId: null,
   playerName: null,
+  authToken: null,
 
   // ── Campus Areas ──
   campusAreas: [
-    { id: 'front_gate',      name: 'Front Gate',      position: [0, 0, -42],  size: [14, 5, 4],   color: '#5a4a3a' },
-    { id: 'audi_block',      name: 'Auditorium',      position: [-28, 0, -28],size: [16, 9, 12],  color: '#7c3412' },
-    { id: 'junior_college',  name: 'Junior College',  position: [-28, 0, -14],size: [18, 6, 8],   color: '#7c2d12' },
-    { id: 'central_block',   name: 'Main Block',      position: [-10, 0, -8], size: [22, 12, 18], color: '#8a3412' },
-    { id: 'block_1',         name: 'Research Center', position: [28, 0, -20], size: [14, 8, 12],  color: '#3b1c57' },
-    { id: 'computer_lab',    name: 'Computer Lab',    position: [28, 0, 0],   size: [14, 7, 12],  color: '#1a1a4e' },
-    { id: 'canteen_right',   name: 'Cafeteria',       position: [32, 0, 16],  size: [10, 4, 8],   color: '#7c3d00' },
-    { id: 'block_2',         name: 'MCA Department',  position: [8, 0, 14],   size: [16, 8, 12],  color: '#7c3412' },
-    { id: 'security_office', name: 'Security Office', position: [-30, 0, 4],  size: [8, 4, 8],    color: '#2d2d2d' },
-    { id: 'library',         name: 'Library',         position: [-24, 0, 22], size: [14, 7, 10],  color: '#1a3a2d' },
-    { id: 'block_4',         name: 'Block 4',         position: [-10, 0, 30], size: [14, 7, 10],  color: '#7c3412' },
-    { id: 'she_block',       name: 'She Block',       position: [-28, 0, 34], size: [10, 5, 8],   color: '#7c185d' },
-    { id: 'rd_block',        name: 'R&D Block',       position: [-28, 0, 44], size: [12, 6, 8],   color: '#3b1c57' },
-    { id: 'girls_hostel',    name: 'Girls Hostel',    position: [6, 0, 40],   size: [18, 6, 8],   color: '#7c3412' },
-    { id: 'basketball_court',name: 'Basketball Court',position: [20, 0, -32], size: [16, 1, 12],  color: '#1d4ed8' },
+    { id: 'front_gate',      name: 'Front Gate',      position: [0, 0, -48],  size: [14, 5, 4],   color: '#5a4a3a' },
+    { id: 'vehicle_entry',   name: 'Vehicle Entry',   position: [-36, 0, -48],size: [8, 5, 4],    color: '#374151' },
+    { id: 'parking',         name: 'Parking',         position: [-36, 0, -32],size: [12, 1, 26],  color: '#4b5563' },
+    { id: 'audi_block',      name: 'Audi Block',      position: [-12, 0, -38],size: [16, 9, 10],  color: '#7c3412' },
+    { id: 'junior_college',  name: 'Junior College',  position: [-12, 0, -26],size: [18, 7, 8],   color: '#7c2d12' },
+    { id: 'central_block',   name: 'Central Block',   position: [-12, 0, -6], size: [22, 12, 18], color: '#8a3412' },
+    { id: 'plants_trees',    name: 'Plants & Trees',  position: [22, 0, -38], size: [26, 1, 14],  color: '#15803d' },
+    { id: 'basketball_court',name: 'Basket Ball Court (Right)',position: [20, 0, -22],size: [16, 1, 12],color: '#1d4ed8' },
+    { id: 'canteen_right_top',name: 'Canteen (Right Top)',position: [34, 0, -27],size: [6, 4, 4], color: '#7c3d00' },
+    { id: 'canteen_right_mid',name: 'Canteen (Right Middle)',position: [34, 0, -22],size: [6, 4, 4],color: '#7c3d00' },
+    { id: 'canteen_right_bot',name: 'Canteen (Right Bottom)',position: [34, 0, -17],size: [6, 4, 4],color: '#7c3d00' },
+    { id: 'block_1',         name: 'Block - 1',       position: [32, 0, 4],   size: [8, 8, 14],   color: '#3b1c57' },
+    { id: 'park_garden',     name: 'Park Garden',     position: [20, 0, -2],  size: [16, 1, 16],  color: '#16a34a' },
+    { id: 'block_2',         name: 'Block - 2',       position: [20, 0, 18],  size: [16, 8, 12],  color: '#7c3412' },
+    { id: 'birds_park',      name: 'Birds Park',      position: [20, 0, 30],  size: [14, 1, 10],  color: '#15803d' },
+    { id: 'canteen_bot_right',name: 'Canteen (Bottom Right)',position: [30, 0, 42],size: [10, 5, 12],color: '#7c3d00' },
+    { id: 'back_gate',       name: 'Back Gate',       position: [-2, 0, 48],  size: [10, 5, 4],   color: '#5a4a3a' },
+    { id: 'rd_block',        name: 'R&D Block',       position: [-28, 0, 42], size: [14, 6, 10],  color: '#3b1c57' },
+    { id: 'block_4',         name: 'Block - 4',       position: [-28, 0, 30], size: [14, 7, 10],  color: '#7c3412' },
+    { id: 'she_block',       name: 'She Block / Boys Hostel',position: [-28, 0, 18],size: [16, 7, 10],color: '#7c185d' },
+    { id: 'hockey_court',    name: 'Hockey Court',    position: [-30, 0, 5],  size: [14, 1, 10],  color: '#065f46' },
+    { id: 'basketball_court_left',name: 'Basket Ball Court (Left)',position: [-30, 0, -5],size: [14, 1, 10],color: '#1d4ed8' },
+    { id: 'sitting_area',    name: 'Sitting Area',    position: [-12, 0, 10], size: [12, 1, 10],  color: '#374151' },
+    { id: 'girls_hostel',    name: 'Girls Hostel',    position: [10, 0, 42],  size: [18, 6, 10],  color: '#7c3412' },
   ],
   currentArea: null,
+  clickTarget: null,
+  cameraYaw: 0,
 
   // ── Evidence ──
   worldEvidence: [],         // evidence items visible in 3D world
@@ -82,6 +94,8 @@ const useGameStore = create((set, get) => ({
 
   // ── Actions ──
   setPlayerPosition: (position) => set({ playerPosition: position }),
+  setClickTarget: (target) => set({ clickTarget: target }),
+  setCameraYaw: (yaw) => set({ cameraYaw: yaw }),
   setPlayerRotation: (rotation) => set({ playerRotation: rotation }),
   setSprinting: (isSprinting) => set({ isSprinting }),
   setCurrentArea: (area) => set({ currentArea: area }),
@@ -91,6 +105,7 @@ const useGameStore = create((set, get) => ({
   setRoomCode: (code) => set({ roomCode: code }),
   setPlayerId: (id) => set({ playerId: id }),
   setPlayerName: (name) => set({ playerName: name }),
+  setAuthToken: (token) => set({ authToken: token }),
   setTimerSeconds: (s) => set({ timerSeconds: s, timeRemaining: s }),
 
   tickTimer: () => set((state) => {

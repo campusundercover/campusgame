@@ -106,13 +106,14 @@ function useGameWebSocket(roomCode, playerId) {
   const setGamePhase = useGameStore((s) => s.setGamePhase)
   const addCorrelation = useGameStore((s) => s.addCorrelation)
   const setCctvReport = useGameStore((s) => s.setCctvReport)
+  const token = useGameStore((s) => s.authToken)
 
 
   useEffect(() => {
     if (!roomCode || !playerId) return
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const host = window.location.hostname
-    const wsUrl = `${protocol}://${host}:8000/ws/game/${roomCode}/${playerId}`
+    const wsUrl = `${protocol}://${host}:8000/ws/game/${roomCode}/${playerId}?token=${encodeURIComponent(token || '')}`
     let ws
     try { ws = new WebSocket(wsUrl) } catch (e) { console.warn('[WS] Could not connect:', e); return }
     setWs(ws)
@@ -154,7 +155,7 @@ function useGameWebSocket(roomCode, playerId) {
     ws.onerror = () => console.warn('[WS] Connection error — running offline.')
     ws.onclose = (e) => console.log('[WS] Closed:', e.code)
     return () => { if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close() }
-  }, [roomCode, playerId])
+  }, [roomCode, playerId, token])
 }
 
 /* ──────────────────── App Root ──────────────────── */
@@ -178,8 +179,8 @@ export default function App() {
 
   const handleLoadingFinish = useCallback(() => {
     setScreen('game')
-    setGamePhase('exploration')
     if (!roomCode) {
+      setGamePhase('exploration')
       setRole('DETECTIVE')
       setAbilities([
         { ability_id: 'CCTV_ANALYSIS', name: 'CCTV Analysis', description: 'Review surveillance from Security Office', location_required: 'Security Office', duration_seconds: 90, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },

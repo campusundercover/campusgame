@@ -1,203 +1,285 @@
-import React, { useMemo, useRef } from 'react'
+import React, { useMemo } from 'react'
 import * as THREE from 'three'
-import { useLoader, useFrame } from '@react-three/fiber'
-import { TextureLoader, RepeatWrapping } from 'three'
 import useGameStore from '../../store/gameStore'
 
 /* ──────────────────────────────────────────────────────────────
-   CAMPUS LAYOUT — Faithful to Christ University aerial view
-   Positions mapped from the actual campus photo reference
+   CAMPUS LAYOUT — Faithful to Christ University Central Campus Map
+   All 24 buildings positioned in exact coordinates.
    ────────────────────────────────────────────────────────────── */
 
 const CAMPUS_BUILDINGS = [
-  // Main Gate area
+  // 1. Front Gate (top center)
   {
     id: 'front_gate', name: 'Front Gate',
-    pos: [0, 0, -42], size: [14, 5, 4],
+    pos: [0, 0, -48], size: [14, 5, 4],
     color: '#5a4a3a', roofColor: '#3a2a1a',
-    facade: '/locations/main_gate.png',
     isGate: true,
   },
-  // --- Top left block ---
+  // 2. Vehicle Entry
   {
-    id: 'audi_block', name: 'Auditorium',
-    pos: [-28, 0, -28], size: [16, 9, 12],
+    id: 'vehicle_entry', name: 'Vehicle Entry',
+    pos: [-36, 0, -48], size: [8, 5, 4],
+    color: '#374151', roofColor: '#1f2937',
+    isGate: true,
+  },
+  // 3. Parking (next to vehicle entry)
+  {
+    id: 'parking', name: 'Parking Area',
+    pos: [-36, 0, -32], size: [12, 0.1, 26],
+    color: '#4b5563', roofColor: '#374151',
+    isParking: true
+  },
+  // 4. Audi Block
+  {
+    id: 'audi_block', name: 'Audi Block',
+    pos: [-12, 0, -38], size: [16, 9, 10],
     color: '#7c3412', roofColor: '#4a1a08',
     facade: '/locations/central_block.png',
-    windows: true, floors: 4,
+    windows: true, floors: 4
   },
+  // 5. Junior College
   {
     id: 'junior_college', name: 'Junior College',
-    pos: [-28, 0, -14], size: [18, 6, 8],
+    pos: [-12, 0, -26], size: [18, 7, 8],
     color: '#7c2d12', roofColor: '#4a1a08',
     facade: '/locations/classroom.png',
-    windows: true, floors: 3,
+    windows: true, floors: 3
   },
-  // --- Central Block (Hero building) ---
+  // 6. Central Block (hollow courtyard layout)
   {
-    id: 'central_block', name: 'Main Block',
-    pos: [-10, 0, -8], size: [22, 12, 18],
+    id: 'central_block', name: 'Central Block',
+    pos: [-12, 0, -6], size: [22, 12, 18],
     color: '#8a3412', roofColor: '#5a1a08',
-    facade: '/locations/central_block.png',
-    windows: true, floors: 5, isHero: true,
+    windows: true, floors: 5, isHero: true, isCentral: true
   },
-  // --- Right column ---
+  // 7. Plants & Trees
   {
-    id: 'block_1', name: 'Research Center',
-    pos: [28, 0, -20], size: [14, 8, 12],
-    color: '#3b1c57', roofColor: '#1e0a2e',
-    facade: '/locations/research_center.png',
-    windows: true, floors: 4,
+    id: 'plants_trees', name: 'Plants & Trees Area',
+    pos: [22, 0, -38], size: [26, 0.05, 14],
+    color: '#15803d', roofColor: '#15803d',
+    isGreen: true
   },
+  // 8. Basketball Court (Right)
   {
-    id: 'computer_lab', name: 'Computer Lab',
-    pos: [28, 0, 0], size: [14, 7, 12],
-    color: '#1a1a4e', roofColor: '#0a0a2e',
-    facade: '/locations/research_center.png',
-    windows: true, floors: 3,
+    id: 'basketball_court', name: 'Basketball Court (Right)',
+    pos: [20, 0, -22], size: [16, 0.2, 12],
+    color: '#1d4ed8', roofColor: '#1d4ed8',
+    isCourt: true
   },
+  // 9. Canteen (Right Top)
   {
-    id: 'canteen_right', name: 'Cafeteria',
-    pos: [32, 0, 16], size: [10, 4, 8],
+    id: 'canteen_right_top', name: 'Canteen (Right Top)',
+    pos: [34, 0, -27], size: [6, 4, 4],
     color: '#7c3d00', roofColor: '#4a2400',
-    facade: '/locations/cafeteria.png',
-    windows: true, floors: 2,
+    windows: true, floors: 2
   },
-  // --- Middle area ---
+  // 10. Canteen (Right Middle)
   {
-    id: 'block_2', name: 'MCA Department',
-    pos: [8, 0, 14], size: [16, 8, 12],
+    id: 'canteen_right_mid', name: 'Canteen (Right Middle)',
+    pos: [34, 0, -22], size: [6, 4, 4],
+    color: '#7c3d00', roofColor: '#4a2400',
+    windows: true, floors: 2
+  },
+  // 11. Canteen (Right Bottom)
+  {
+    id: 'canteen_right_bot', name: 'Canteen (Right Bottom)',
+    pos: [34, 0, -17], size: [6, 4, 4],
+    color: '#7c3d00', roofColor: '#4a2400',
+    windows: true, floors: 2
+  },
+  // 12. Block - 1
+  {
+    id: 'block_1', name: 'Block - 1',
+    pos: [32, 0, 4], size: [8, 8, 14],
+    color: '#3b1c57', roofColor: '#1e0a2e',
+    windows: true, floors: 4
+  },
+  // 13. Park Garden
+  {
+    id: 'park_garden', name: 'Park Garden',
+    pos: [20, 0, -2], size: [16, 0.05, 16],
+    color: '#16a34a', roofColor: '#16a34a',
+    isParkGarden: true
+  },
+  // 14. Block - 2
+  {
+    id: 'block_2', name: 'Block - 2',
+    pos: [20, 0, 18], size: [16, 8, 12],
     color: '#7c3412', roofColor: '#4a1a08',
-    facade: '/locations/classroom.png',
-    windows: true, floors: 4,
+    windows: true, floors: 4
   },
+  // 15. Birds Park
   {
-    id: 'security_office', name: 'Security Office',
-    pos: [-30, 0, 4], size: [8, 4, 8],
-    color: '#2d2d2d', roofColor: '#1a1a1a',
-    facade: '/locations/research_center.png',
-    windows: true, floors: 2,
+    id: 'birds_park', name: 'Birds Park',
+    pos: [20, 0, 30], size: [14, 0.05, 10],
+    color: '#15803d', roofColor: '#15803d',
+    isGreen: true
   },
-  // --- Lower area ---
+  // 16. Canteen (Bottom Right)
   {
-    id: 'library', name: 'Library',
-    pos: [-24, 0, 22], size: [14, 7, 10],
-    color: '#1a3a2d', roofColor: '#0a1a15',
-    facade: '/locations/library.png',
-    windows: true, floors: 3,
+    id: 'canteen_bot_right', name: 'Canteen (Bottom Right)',
+    pos: [30, 0, 42], size: [10, 5, 12],
+    color: '#7c3d00', roofColor: '#4a2400',
+    windows: true, floors: 2
   },
+  // 17. Back Gate
   {
-    id: 'block_4', name: 'Block 4',
-    pos: [-10, 0, 30], size: [14, 7, 10],
-    color: '#7c3412', roofColor: '#4a1a08',
-    facade: '/locations/classroom.png',
-    windows: true, floors: 3,
+    id: 'back_gate', name: 'Back Gate',
+    pos: [-2, 0, 48], size: [10, 5, 4],
+    color: '#5a4a3a', roofColor: '#3a2a1a',
+    isGate: true,
   },
-  {
-    id: 'she_block', name: 'She Block',
-    pos: [-28, 0, 34], size: [10, 5, 8],
-    color: '#7c185d', roofColor: '#4a0a38',
-    facade: '/locations/classroom.png',
-    windows: true, floors: 2,
-  },
+  // 18. R&D Block
   {
     id: 'rd_block', name: 'R&D Block',
-    pos: [-28, 0, 44], size: [12, 6, 8],
+    pos: [-28, 0, 42], size: [14, 6, 10],
     color: '#3b1c57', roofColor: '#1e0a2e',
-    facade: '/locations/research_center.png',
-    windows: true, floors: 3,
+    windows: true, floors: 3
   },
+  // 19. Block - 4
+  {
+    id: 'block_4', name: 'Block - 4',
+    pos: [-28, 0, 30], size: [14, 7, 10],
+    color: '#7c3412', roofColor: '#4a1a08',
+    windows: true, floors: 3
+  },
+  // 20. She Block / Boys Hostel
+  {
+    id: 'she_block', name: 'She Block / Boys Hostel',
+    pos: [-28, 0, 18], size: [16, 7, 10],
+    color: '#7c185d', roofColor: '#4a0a38',
+    windows: true, floors: 3
+  },
+  // 21. Hockey Court
+  {
+    id: 'hockey_court', name: 'Hockey Court',
+    pos: [-30, 0, 5], size: [14, 0.2, 10],
+    color: '#065f46', roofColor: '#065f46',
+    isHockeyCourt: true
+  },
+  // 22. Basket Ball Court (Left)
+  {
+    id: 'basketball_court_left', name: 'Basket Ball Court (Left)',
+    pos: [-30, 0, -5], size: [14, 0.2, 10],
+    color: '#1d4ed8', roofColor: '#1d4ed8',
+    isCourt: true
+  },
+  // 23. Sitting Area
+  {
+    id: 'sitting_area', name: 'Sitting Area',
+    pos: [-12, 0, 10], size: [12, 0.15, 10],
+    color: '#475569', roofColor: '#374151',
+    isSittingArea: true
+  },
+  // 24. Girls Hostel
   {
     id: 'girls_hostel', name: 'Girls Hostel',
-    pos: [6, 0, 40], size: [18, 6, 8],
+    pos: [10, 0, 42], size: [18, 6, 10],
     color: '#7c3412', roofColor: '#4a1a08',
-    facade: '/locations/classroom.png',
-    windows: true, floors: 3,
-  },
-  // Basketball courts
-  {
-    id: 'basketball_court', name: 'Basketball Court',
-    pos: [20, 0, -32], size: [16, 0.2, 12],
-    color: '#1d4ed8', roofColor: '#1d4ed8',
-    isCourt: true,
-  },
+    windows: true, floors: 3
+  }
 ]
 
-/* ── Paths / Roads ── */
+/* ── Paths / Roads (Mapped around Central spine, left spine, right spine, and crossroads) ── */
 const PATHS = [
-  // Main central vertical spine
-  { pos: [0, 0.02, 0], size: [4, 0.04, 100] },
-  // Horizontal roads
-  { pos: [0, 0.02, -30], size: [80, 0.04, 3] },
-  { pos: [0, 0.02, 0],   size: [80, 0.04, 3] },
-  { pos: [0, 0.02, 28],  size: [80, 0.04, 3] },
-  // Side verticals
-  { pos: [-22, 0.02, 0], size: [3, 0.04, 80] },
-  { pos: [22, 0.02, 0],  size: [3, 0.04, 80] },
+  // Main vertical spine road (separates Central Block column and Right column)
+  { pos: [4, 0.02, 0], size: [5, 0.04, 100] },
+  // Left vertical spine road (between JC column and Parking/Hostels)
+  { pos: [-22, 0.02, 0], size: [3, 0.04, 100] },
+  // Right vertical spine road (east of Park Garden & Block 2)
+  { pos: [29, 0.02, 0], size: [3, 0.04, 100] },
+  // Horizontal crossroads connecting them
+  { pos: [0, 0.02, -30], size: [80, 0.04, 3] }, // Upper crossroad
+  { pos: [0, 0.02, 10],  size: [80, 0.04, 3] }, // Middle crossroad
+  { pos: [0, 0.02, 36],  size: [80, 0.04, 3] }  // Lower crossroad
 ]
 
-/* ── Green Zones (grass areas) ── */
+/* ── Grass lawns ── */
 const GREEN_ZONES = [
-  { pos: [20, 0.01, -16], size: [16, 0.02, 12] },  // Park near courts
-  { pos: [-5, 0.01, -38], size: [10, 0.02, 8] },   // Entry garden
-  { pos: [14, 0.01, 24],  size: [12, 0.02, 14] },  // Mid campus park
-  { pos: [-5, 0.01, 48],  size: [20, 0.02, 10] },  // Back garden
+  { pos: [20, 0.01, -38], size: [26, 0.02, 14] }, // Plants & trees area
+  { pos: [20, 0.01, -2],  size: [16, 0.02, 16] }, // Park Garden
+  { pos: [20, 0.01, 30],  size: [14, 0.02, 10] }, // Birds park
+  { pos: [-22, 0.01, -44], size: [16, 0.02, 8] }   // Upper left corner garden
 ]
 
-/* ── Street Lamps positions ── */
+/* ── Street lamp layout ── */
 const LAMP_POSITIONS = [
-  [-8, 0, -30], [8, 0, -30], [-8, 0, 0], [8, 0, 0],
-  [-22, 0, -15], [22, 0, -15], [-22, 0, 14], [22, 0, 14],
-  [0, 0, 14], [0, 0, -14], [-8, 0, 28], [8, 0, 28],
+  [4, 0, -40], [4, 0, -20], [4, 0, 0], [4, 0, 20], [4, 0, 40],
+  [-22, 0, -35], [-22, 0, -10], [-22, 0, 15], [-22, 0, 40],
+  [29, 0, -35], [29, 0, -10], [29, 0, 15], [29, 0, 40]
 ]
 
-/* ── Trees positions ── */
+/* ── Tree positions ── */
 const TREE_POSITIONS = [
-  [-18, 0, -36], [-12, 0, -36], [12, 0, -36], [18, 0, -36],
+  [-18, 0, -45], [-12, 0, -45], [12, 0, -45], [18, 0, -45],
   [24, 0, -14], [24, 0, -8], [24, 0, 18], [24, 0, 24],
   [-32, 0, -8], [-32, 0, 0], [-32, 0, 8],
   [-4, 0, 24], [4, 0, 24], [-4, 0, 38], [4, 0, 38],
   [16, 0, 30], [20, 0, 30], [-16, 0, 30],
+  [22, 0, -38], [24, 0, -36], [20, 0, -40] // Plants & trees cluster
 ]
 
-/* ══════════════════════════════════════════════
-   COMPONENTS
-   ══════════════════════════════════════════════ */
-
-/* ── Textured Ground ── */
-function Ground() {
+/* ── Ground component with Click-to-Move handler ── */
+function Ground({ onGroundClick }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0, 0]}
+      receiveShadow
+      onPointerDown={onGroundClick}
+    >
       <planeGeometry args={[120, 120]} />
-      <meshStandardMaterial
-        roughness={0.8}
-        metalness={0.1}
-        color="#cbd5e1"
-      />
+      <meshStandardMaterial roughness={0.8} metalness={0.1} color="#94a3b8" />
     </mesh>
   )
 }
 
-/* ── Grass Zones ── */
-function GrassZone({ pos, size }) {
+/* ── Green lawn zone with Click-to-Move ── */
+function GrassZone({ pos, size, onGroundClick }) {
   return (
-    <mesh position={pos} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[size[0], size[2]]} />
-      <meshStandardMaterial
-        roughness={0.9}
-        color="#22c55e"
-      />
+    <mesh
+      position={pos}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+      onPointerDown={onGroundClick}
+    >
+      <planeGeometry args={[size[0], size[1] || size[2]]} />
+      <meshStandardMaterial roughness={0.9} color="#15803d" />
     </mesh>
   )
 }
 
-/* ── Concrete Path ── */
-function Path({ pos, size }) {
+/* ── Concrete Road/Path with Click-to-Move ── */
+function Path({ pos, size, onGroundClick }) {
   return (
-    <mesh position={pos} receiveShadow>
+    <mesh position={pos} receiveShadow onPointerDown={onGroundClick}>
       <boxGeometry args={size} />
-      <meshStandardMaterial color="#64748b" roughness={0.9} metalness={0} />
+      <meshStandardMaterial color="#475569" roughness={0.9} metalness={0.05} />
     </mesh>
+  )
+}
+
+/* ── Low-poly Tree ── */
+function Tree({ pos }) {
+  const trunkH = 1.6 + Math.random() * 0.4
+  const canopyR = 0.9 + Math.random() * 0.5
+  return (
+    <group position={pos}>
+      {/* Trunk */}
+      <mesh position={[0, trunkH / 2, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.16, trunkH, 7]} />
+        <meshStandardMaterial color="#451a03" roughness={0.9} />
+      </mesh>
+      {/* Leaves canopy */}
+      <mesh position={[0, trunkH + canopyR * 0.4, 0]} castShadow>
+        <coneGeometry args={[canopyR, canopyR * 1.5, 7]} />
+        <meshStandardMaterial color="#166534" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, trunkH + canopyR * 0.9, 0]} castShadow>
+        <coneGeometry args={[canopyR * 0.7, canopyR * 1.0, 6]} />
+        <meshStandardMaterial color="#15803d" roughness={0.85} />
+      </mesh>
+    </group>
   )
 }
 
@@ -210,277 +292,358 @@ function StreetLamp({ pos }) {
 
   return (
     <group position={pos}>
-      {/* Pole */}
+      {/* Post */}
       <mesh position={[0, 2.5, 0]} castShadow>
-        <cylinderGeometry args={[0.06, 0.08, 5, 8]} />
-        <meshStandardMaterial color="#3a3530" roughness={0.5} metalness={0.6} />
+        <cylinderGeometry args={[0.05, 0.08, 5, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.7} />
       </mesh>
-      {/* Arm */}
-      <mesh position={[0.4, 4.8, 0]} rotation={[0, 0, -Math.PI / 6]}>
-        <cylinderGeometry args={[0.04, 0.04, 1, 8]} />
-        <meshStandardMaterial color="#3a3530" roughness={0.5} metalness={0.6} />
+      {/* Lamp Head arm */}
+      <mesh position={[0.3, 4.8, 0]} rotation={[0, 0, -Math.PI / 6]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.8, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.7} />
       </mesh>
-      {/* Lamp head */}
-      <mesh position={[0.85, 4.5, 0]}>
-        <boxGeometry args={[0.35, 0.18, 0.22]} />
+      {/* Glow cap */}
+      <mesh position={[0.65, 4.55, 0]}>
+        <boxGeometry args={[0.25, 0.15, 0.2]} />
         <meshStandardMaterial
-          color="#f1f5f9"
-          emissive="#ffeebb"
-          emissiveIntensity={nightFactor >= 0.4 ? 2.5 * nightFactor : 0}
-          roughness={0.3}
+          color="#f8fafc"
+          emissive="#fef08a"
+          emissiveIntensity={nightFactor > 0.35 ? 3.0 : 0}
+          roughness={0.2}
         />
       </mesh>
-      {/* Actual light source - turns on dynamically */}
+      {/* Light Source */}
       <pointLight
-        position={[0.85, 4.3, 0]}
-        intensity={nightFactor >= 0.4 ? 4.5 * nightFactor : 0}
-        distance={12}
-        color="#ffaa30"
-        castShadow={nightFactor >= 0.6}
+        position={[0.65, 4.3, 0]}
+        intensity={nightFactor > 0.35 ? 4.5 * nightFactor : 0}
+        distance={10}
+        color="#fbbf24"
+        castShadow={nightFactor > 0.5}
       />
     </group>
   )
 }
 
-/* ── Tree ── */
-function Tree({ pos }) {
-  const trunkH = 1.5 + Math.random() * 0.5
-  const canopyR = 1.0 + Math.random() * 0.6
+/* ── Main Landmark Sign Board ── */
+function CampusEntranceSign() {
   return (
-    <group position={pos}>
-      {/* Trunk */}
-      <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.12, 0.18, trunkH, 7]} />
-        <meshStandardMaterial color="#3b2a1a" roughness={0.95} />
+    <group position={[0, 0, -42]}>
+      <mesh position={[-2.5, 1.5, 0]}>
+        <cylinderGeometry args={[0.06, 0.08, 3, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.5} />
       </mesh>
-      {/* Canopy - layered cones for realism */}
-      <mesh position={[0, trunkH + canopyR * 0.5, 0]} castShadow>
-        <coneGeometry args={[canopyR, canopyR * 1.6, 8]} />
-        <meshStandardMaterial color="#1a4a1a" roughness={0.8} />
+      <mesh position={[2.5, 1.5, 0]}>
+        <cylinderGeometry args={[0.06, 0.08, 3, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.5} />
       </mesh>
-      <mesh position={[0, trunkH + canopyR * 1.1, 0]} castShadow>
-        <coneGeometry args={[canopyR * 0.65, canopyR * 1.1, 7]} />
-        <meshStandardMaterial color="#1f5a1f" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, trunkH + canopyR * 1.6, 0]} castShadow>
-        <coneGeometry args={[canopyR * 0.35, canopyR * 0.7, 6]} />
-        <meshStandardMaterial color="#256325" roughness={0.8} />
+      <mesh position={[0, 2.7, 0]}>
+        <boxGeometry args={[6, 1.0, 0.12]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.4} />
       </mesh>
     </group>
   )
 }
 
-/* ── Building ── */
-function Building({ b }) {
+/* ── Dynamic building renderer ── */
+function Building({ b, onGroundClick }) {
   const timeRemaining = useGameStore((s) => s.timeRemaining)
   const timerSeconds = useGameStore((s) => s.timerSeconds)
   const elapsed = Math.max(0, timerSeconds - timeRemaining)
   const nightFactor = Math.min(1.0, elapsed / 600)
 
   const [bw, bh, bd] = b.size
-  const windowCols = Math.floor(bw / 2.5)
-  const windowRows = b.floors || Math.floor(bh / 2.5)
+  const windowCols = Math.max(2, Math.floor(bw / 2.8))
+  const windowRows = b.floors || Math.max(2, Math.floor(bh / 2.8))
 
-  if (b.isCourt) {
+  // 1. Basketball or Hockey Court
+  if (b.isCourt || b.isHockeyCourt) {
+    const linesColor = b.isHockeyCourt ? '#10b981' : '#3b82f6'
     return (
       <group position={b.pos}>
-        {/* Court surface */}
-        <mesh position={[0, 0.1, 0]} receiveShadow>
+        {/* Surface */}
+        <mesh position={[0, 0.1, 0]} receiveShadow onPointerDown={onGroundClick}>
           <boxGeometry args={[bw, 0.2, bd]} />
-          <meshStandardMaterial color="#1d3fa8" roughness={0.4} />
+          <meshStandardMaterial color={b.color} roughness={0.5} />
         </mesh>
-        {/* Court lines */}
+        {/* Outer border lines */}
         <mesh position={[0, 0.21, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[bw - 0.4, bd - 0.4]} />
-          <meshBasicMaterial color="#2455cc" transparent opacity={0.5} />
+          <meshBasicMaterial color={linesColor} transparent opacity={0.4} />
         </mesh>
-        {/* Center circle */}
+        {/* Court center line/ring */}
         <mesh position={[0, 0.22, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.8, 2.0, 32]} />
-          <meshBasicMaterial color="white" transparent opacity={0.7} side={THREE.DoubleSide} />
+          <ringGeometry args={[1.5, 1.7, 32]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.6} side={THREE.DoubleSide} />
         </mesh>
-        {/* Floodlights - turned off in daylight */}
-        {[[-bw / 2 - 0.5, 0, -bd / 2 - 0.5], [bw / 2 + 0.5, 0, -bd / 2 - 0.5],
-          [-bw / 2 - 0.5, 0, bd / 2 + 0.5], [bw / 2 + 0.5, 0, bd / 2 + 0.5]].map((lp, i) => (
-          <group key={i} position={lp}>
-            <mesh position={[0, 4, 0]}>
-              <cylinderGeometry args={[0.07, 0.1, 8, 6]} />
-              <meshStandardMaterial color="#2a2520" roughness={0.6} metalness={0.5} />
+      </group>
+    )
+  }
+
+  // 2. Front or Back Gate Archway
+  if (b.isGate) {
+    return (
+      <group position={b.pos}>
+        {/* Left post */}
+        <mesh position={[-4, bh / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[3, bh, bd]} />
+          <meshStandardMaterial color={b.color} roughness={0.7} />
+        </mesh>
+        {/* Right post */}
+        <mesh position={[4, bh / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[3, bh, bd]} />
+          <meshStandardMaterial color={b.color} roughness={0.7} />
+        </mesh>
+        {/* Top arch beam */}
+        <mesh position={[0, bh + 0.6, 0]} castShadow>
+          <boxGeometry args={[14, 1.2, bd + 0.4]} />
+          <meshStandardMaterial color="#451a03" roughness={0.6} />
+        </mesh>
+      </group>
+    )
+  }
+
+  // 3. Central Block (Courtyard Structure)
+  if (b.isCentral) {
+    return (
+      <group position={b.pos}>
+        {/* Main base plate */}
+        <mesh position={[0, 0.15, 0]} receiveShadow>
+          <boxGeometry args={[bw + 0.6, 0.3, bd + 0.6]} />
+          <meshStandardMaterial color="#334155" roughness={0.9} />
+        </mesh>
+        {/* Courtyard Floor */}
+        <mesh position={[0, 0.21, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow onPointerDown={onGroundClick}>
+          <planeGeometry args={[bw - 5, bd - 5]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.9} />
+        </mesh>
+        {/* Courtyard center circle garden */}
+        <mesh position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[2.2, 32]} />
+          <meshBasicMaterial color="#166534" />
+        </mesh>
+        <Tree pos={[0, 0.24, 0]} />
+
+        {/* 4 surrounding building wings */}
+        {/* North Wing */}
+        <mesh position={[0, bh / 2, -bd / 2 + 1.2]} castShadow receiveShadow>
+          <boxGeometry args={[bw, bh, 2.4]} />
+          <meshStandardMaterial color={b.color} roughness={0.75} />
+        </mesh>
+        {/* South Wing */}
+        <mesh position={[0, bh / 2, bd / 2 - 1.2]} castShadow receiveShadow>
+          <boxGeometry args={[bw, bh, 2.4]} />
+          <meshStandardMaterial color={b.color} roughness={0.75} />
+        </mesh>
+        {/* West Wing */}
+        <mesh position={[-bw / 2 + 1.2, bh / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.4, bh, bd - 4.8]} />
+          <meshStandardMaterial color={b.color} roughness={0.75} />
+        </mesh>
+        {/* East Wing */}
+        <mesh position={[bw / 2 - 1.2, bh / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.4, bh, bd - 4.8]} />
+          <meshStandardMaterial color={b.color} roughness={0.75} />
+        </mesh>
+
+        {/* Flat continuous roof beam */}
+        <mesh position={[0, bh + 0.2, 0]}>
+          <boxGeometry args={[bw + 0.2, 0.4, bd + 0.2]} />
+          <meshStandardMaterial color={b.roofColor} roughness={0.8} />
+        </mesh>
+      </group>
+    )
+  }
+
+  // 4. Park Garden (Interactive landscape circular design)
+  if (b.isParkGarden) {
+    return (
+      <group position={b.pos}>
+        {/* Lawn base */}
+        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow onPointerDown={onGroundClick}>
+          <circleGeometry args={[bw / 2, 32]} />
+          <meshStandardMaterial color="#166534" roughness={0.9} />
+        </mesh>
+        {/* Radial paved walk paths */}
+        {[0, Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4].map((rot, ri) => (
+           <mesh key={ri} position={[0, 0.07, 0]} rotation={[-Math.PI / 2, 0, rot]} receiveShadow onPointerDown={onGroundClick}>
+             <planeGeometry args={[1.0, bw - 0.4]} />
+             <meshStandardMaterial color="#cbd5e1" roughness={0.9} />
+           </mesh>
+        ))}
+        {/* Water fountain pool */}
+        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[1.5, 1.8, 24]} />
+          <meshStandardMaterial color="#475569" roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.5, 24]} />
+          <meshStandardMaterial color="#0284c7" roughness={0.15} metalness={0.9} />
+        </mesh>
+      </group>
+    )
+  }
+
+  // 5. Sitting Area
+  if (b.isSittingArea) {
+    return (
+      <group position={b.pos}>
+        {/* Paved base */}
+        <mesh position={[0, 0.06, 0]} receiveShadow onPointerDown={onGroundClick}>
+          <boxGeometry args={[bw, 0.12, bd]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.95} />
+        </mesh>
+        {/* Benches */}
+        {[
+          { p: [-bw / 3.2, 0.22, -bd / 3.2], r: 0 },
+          { p: [bw / 3.2, 0.22, -bd / 3.2], r: Math.PI / 2 },
+          { p: [-bw / 3.2, 0.22, bd / 3.2], r: -Math.PI / 2 },
+          { p: [bw / 3.2, 0.22, bd / 3.2], r: Math.PI }
+        ].map((bench, bi) => (
+          <group key={bi} position={bench.p} rotation={[0, bench.r, 0]}>
+            <mesh castShadow>
+              <boxGeometry args={[1.4, 0.2, 0.45]} />
+              <meshStandardMaterial color="#78350f" roughness={0.9} />
             </mesh>
-            <mesh position={[0, 8.2, 0]}>
-              <boxGeometry args={[0.6, 0.2, 0.4]} />
-              <meshStandardMaterial color="#2a2520" emissive="#000000" emissiveIntensity={0} />
+            <mesh position={[-0.5, -0.15, 0]}>
+              <boxGeometry args={[0.12, 0.3, 0.4]} />
+              <meshStandardMaterial color="#334155" />
             </mesh>
-            <pointLight position={[0, 7.5, 0]} intensity={0} distance={20} color="#e8f0ff" />
+            <mesh position={[0.5, -0.15, 0]}>
+              <boxGeometry args={[0.12, 0.3, 0.4]} />
+              <meshStandardMaterial color="#334155" />
+            </mesh>
           </group>
         ))}
       </group>
     )
   }
 
-  if (b.isGate) {
+  // 6. Parking area with low-poly cars
+  if (b.isParking) {
     return (
       <group position={b.pos}>
-        {/* Gate arch */}
-        <mesh position={[-4, bh / 2, 0]} castShadow>
-          <boxGeometry args={[5, bh, bd]} />
-          <meshStandardMaterial color="#7c2d12" roughness={0.7} />
+        {/* Asphalt base */}
+        <mesh position={[0, 0.05, 0]} receiveShadow onPointerDown={onGroundClick}>
+          <boxGeometry args={[bw, 0.1, bd]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.8} />
         </mesh>
-        <mesh position={[4, bh / 2, 0]} castShadow>
-          <boxGeometry args={[5, bh, bd]} />
-          <meshStandardMaterial color="#7c2d12" roughness={0.7} />
-        </mesh>
-        {/* Top arch */}
-        <mesh position={[0, bh + 1, 0]} castShadow>
-          <boxGeometry args={[14, 2.5, bd + 0.5]} />
-          <meshStandardMaterial color="#5a3a20" roughness={0.7} />
-        </mesh>
-        {/* Gate light - disabled in daylight */}
-        <pointLight position={[0, bh, 0]} intensity={0} distance={18} color="#ffcc60" />
-        {/* Label billboard */}
-        <mesh position={[0, bh + 2.8, -0.3]}>
-          <planeGeometry args={[8, 1.2]} />
-          <meshBasicMaterial color="#1a0800" />
-        </mesh>
+        {/* Paving markings */}
+        {Array.from({ length: 5 }).map((_, i) => {
+          const pz = -bd / 2 + 5 + i * 4.2
+          return (
+            <mesh key={i} position={[0, 0.11, pz]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[bw - 1.5, 0.15]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
+            </mesh>
+          )
+        })}
+        {/* Cars */}
+        {[
+          { x: -bw / 4, z: -bd / 2 + 5, color: '#ef4444' },
+          { x: bw / 4, z: -bd / 2 + 9.2, color: '#3b82f6' },
+          { x: -bw / 4, z: -bd / 2 + 13.4, color: '#f59e0b' },
+          { x: bw / 4, z: -bd / 2 + 17.6, color: '#10b981' }
+        ].map((car, ci) => (
+          <group key={ci} position={[car.x, 0.28, car.z]} rotation={[0, car.x > 0 ? Math.PI : 0, 0]}>
+            <mesh castShadow>
+              <boxGeometry args={[2.0, 0.55, 1.1]} />
+              <meshStandardMaterial color={car.color} roughness={0.4} />
+            </mesh>
+            <mesh position={[-0.15, 0.45, 0]}>
+              <boxGeometry args={[1.0, 0.38, 0.95]} />
+              <meshStandardMaterial color="#0f172a" roughness={0.15} />
+            </mesh>
+          </group>
+        ))}
       </group>
     )
   }
 
+  // 7. General Building
   return (
     <group position={[b.pos[0], 0, b.pos[2]]}>
-      {/* Foundation plinth */}
-      <mesh position={[0, 0.2, 0]} receiveShadow>
-        <boxGeometry args={[bw + 0.6, 0.4, bd + 0.6]} />
-        <meshStandardMaterial color="#3a3028" roughness={0.95} />
+      {/* Plinth */}
+      <mesh position={[0, 0.18, 0]} receiveShadow>
+        <boxGeometry args={[bw + 0.5, 0.36, bd + 0.5]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.9} />
       </mesh>
-
-      {/* Main building body */}
+      {/* Building Body */}
       <mesh position={[0, bh / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[bw, bh, bd]} />
-        <meshStandardMaterial
-          color={b.color}
-          roughness={0.75}
-          metalness={0.05}
-        />
+        <meshStandardMaterial color={b.color} roughness={0.7} metalness={0.1} />
       </mesh>
-
-      {/* Roof parapet */}
-      <mesh position={[0, bh + 0.25, 0]}>
-        <boxGeometry args={[bw + 0.3, 0.5, bd + 0.3]} />
+      {/* Roof */}
+      <mesh position={[0, bh + 0.15, 0]}>
+        <boxGeometry args={[bw + 0.2, 0.3, bd + 0.2]} />
         <meshStandardMaterial color={b.roofColor} roughness={0.8} />
       </mesh>
-      {/* Roof top flat */}
-      <mesh position={[0, bh + 0.5, 0]}>
-        <boxGeometry args={[bw - 0.2, 0.15, bd - 0.2]} />
-        <meshStandardMaterial color={b.roofColor} roughness={0.9} />
-      </mesh>
 
-      {/* Columns (front face) */}
-      {Array.from({ length: Math.min(windowCols, 6) }).map((_, ci) => {
-        const colX = -bw / 2 + 1 + ci * (bw / Math.min(windowCols, 6))
-        return (
-          <mesh key={`col-${ci}`} position={[colX, bh / 2, bd / 2 + 0.12]} castShadow>
-            <cylinderGeometry args={[0.12, 0.15, bh, 8]} />
-            <meshStandardMaterial color="#c8a878" roughness={0.6} />
-          </mesh>
-        )
-      })}
-
-      {/* Daytime Windows - front face */}
-      {Array.from({ length: windowRows }).map((_, row) =>
-        Array.from({ length: windowCols }).map((_, col) => {
-          const wx = -bw / 2 + 1.2 + col * ((bw - 1.5) / Math.max(windowCols - 1, 1))
-          const wy = 1.2 + row * (bh / windowRows)
+      {/* Windows front and back */}
+      {b.windows && Array.from({ length: windowRows }).map((_, r) =>
+        Array.from({ length: windowCols }).map((_, c) => {
+          const wx = -bw / 2 + 1.2 + c * ((bw - 2.4) / Math.max(windowCols - 1, 1))
+          const wy = 1.0 + r * ((bh - 2.0) / Math.max(windowRows - 1, 1))
           return (
-            <group key={`win-f-${row}-${col}`} position={[wx, wy, bd / 2 + 0.02]}>
+            <group key={`w-${r}-${c}`} position={[wx, wy, bd / 2 + 0.02]}>
               <mesh>
-                <planeGeometry args={[0.8, 1.0]} />
+                <planeGeometry args={[0.7, 0.95]} />
                 <meshStandardMaterial
                   color="#1e293b"
                   roughness={0.15}
-                  metalness={0.8}
-                  emissive={b.isHero ? "#f59e0b" : "#fed7aa"}
-                  emissiveIntensity={nightFactor * 1.5}
+                  metalness={0.9}
+                  emissive="#fef08a"
+                  emissiveIntensity={nightFactor * 2.0}
                 />
-              </mesh>
-              {/* Window frame */}
-              <mesh position={[0, 0, 0.01]}>
-                <planeGeometry args={[0.86, 1.06]} />
-                <meshStandardMaterial color="#5a3a20" roughness={0.8} />
               </mesh>
             </group>
           )
         })
       )}
-
-      {/* Ambient glow at base - turns on at night */}
-      <pointLight
-        position={[0, 1.5, bd / 2 + 1]}
-        intensity={nightFactor * 2.5}
-        distance={b.isHero ? 20 : 10}
-        color="#ffcc60"
-      />
     </group>
   )
 }
 
-/* ── Sky Atmosphere ── */
+/* ── Skybox Night/Day Dome ── */
 function SkyAtmosphere() {
   const timeRemaining = useGameStore((s) => s.timeRemaining)
   const timerSeconds = useGameStore((s) => s.timerSeconds)
   const elapsed = Math.max(0, timerSeconds - timeRemaining)
   const nightFactor = Math.min(1.0, elapsed / 600)
 
-  const skyColor = nightFactor < 0.5
-    ? '#1e1b4b' // warm purple/dusk
-    : '#09090b' // deep black night
-
-  const horizonColor = nightFactor < 0.5
-    ? '#f97316' // orange dusk glow
-    : '#1e293b' // dark blue night glow
+  const skyColor = nightFactor < 0.5 ? '#1e1b4b' : '#020617'
+  const horizonColor = nightFactor < 0.5 ? '#ea580c' : '#0f172a'
 
   return (
     <>
-      {/* Sky dome */}
       <mesh>
-        <sphereGeometry args={[90, 32, 32]} />
-        <meshBasicMaterial
-          color={skyColor}
-          side={THREE.BackSide}
-        />
+        <sphereGeometry args={[95, 32, 32]} />
+        <meshBasicMaterial color={skyColor} side={THREE.BackSide} />
       </mesh>
-
-      {/* Horizon glow */}
       <mesh position={[0, -2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[60, 90, 64]} />
-        <meshBasicMaterial
-          color={horizonColor}
-          side={THREE.DoubleSide}
-          transparent
-          opacity={0.6}
-        />
+        <ringGeometry args={[65, 95, 64]} />
+        <meshBasicMaterial color={horizonColor} side={THREE.DoubleSide} transparent opacity={0.5} />
       </mesh>
     </>
   )
 }
 
-/* ── Stars ── */
+/* ── Stars System ── */
 function Stars() {
   const timeRemaining = useGameStore((s) => s.timeRemaining)
   const timerSeconds = useGameStore((s) => s.timerSeconds)
   const elapsed = Math.max(0, timerSeconds - timeRemaining)
   const nightFactor = Math.min(1.0, elapsed / 600)
 
-  const starsCount = 120
+  const starsCount = 100
   const positions = useMemo(() => {
     const arr = []
     for (let i = 0; i < starsCount; i++) {
       const theta = Math.random() * Math.PI * 2
       const phi = Math.acos(Math.random() * 2 - 1)
-      const r = 85
+      const r = 90
       arr.push([
         r * Math.sin(phi) * Math.cos(theta),
-        Math.abs(r * Math.sin(phi) * Math.sin(theta)) + 10,
+        Math.abs(r * Math.sin(phi) * Math.sin(theta)) + 5,
         r * Math.cos(phi)
       ])
     }
@@ -493,7 +656,7 @@ function Stars() {
     <group>
       {positions.map((pos, i) => (
         <mesh key={i} position={pos}>
-          <boxGeometry args={[0.25, 0.25, 0.25]} />
+          <boxGeometry args={[0.2, 0.2, 0.2]} />
           <meshBasicMaterial color="#ffffff" transparent opacity={nightFactor * 0.8} />
         </mesh>
       ))}
@@ -501,43 +664,27 @@ function Stars() {
   )
 }
 
-/* ── Main Block Billboard (landmark) ── */
-function CampusEntranceSign() {
-  return (
-    <group position={[0, 0, -38]}>
-      {/* Sign posts */}
-      <mesh position={[-3.5, 2, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 4, 8]} />
-        <meshStandardMaterial color="#3a2a15" roughness={0.6} metalness={0.4} />
-      </mesh>
-      <mesh position={[3.5, 2, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 4, 8]} />
-        <meshStandardMaterial color="#3a2a15" roughness={0.6} metalness={0.4} />
-      </mesh>
-      {/* Sign board */}
-      <mesh position={[0, 3.8, 0]}>
-        <boxGeometry args={[8, 1.2, 0.15]} />
-        <meshStandardMaterial color="#1a0a00" roughness={0.5} metalness={0.2} />
-      </mesh>
-      <pointLight position={[0, 3.5, 0.5]} intensity={0} distance={6} color="#ffaa30" />
-    </group>
-  )
-}
-
-/* ══════════════════════════════════════════════
-   MAIN CAMPUS MAP
-   ══════════════════════════════════════════════ */
+/* ── Main map exporter ── */
 export default function CampusMap() {
   const timeRemaining = useGameStore((s) => s.timeRemaining)
   const timerSeconds = useGameStore((s) => s.timerSeconds)
   const elapsed = Math.max(0, timerSeconds - timeRemaining)
   const nightFactor = Math.min(1.0, elapsed / 600)
 
-  // Lerp ambient and directional light values
-  const ambientIntensity = THREE.MathUtils.lerp(0.4, 0.12, nightFactor)
-  const ambientColor = nightFactor < 0.5 ? '#fed7aa' : '#1e293b'
+  const setClickTarget = useGameStore((s) => s.setClickTarget)
 
-  const mainLightIntensity = THREE.MathUtils.lerp(1.2, 0.35, nightFactor)
+  // Ground click catcher
+  const handleGroundClick = (e) => {
+    if (e.button === 0) {
+      e.stopPropagation()
+      setClickTarget([e.point.x, 0.5, e.point.z])
+    }
+  }
+
+  const ambientIntensity = THREE.MathUtils.lerp(0.45, 0.12, nightFactor)
+  const ambientColor = nightFactor < 0.5 ? '#ffedd5' : '#1e293b'
+
+  const mainLightIntensity = THREE.MathUtils.lerp(1.25, 0.3, nightFactor)
   const mainLightColor = nightFactor < 0.5 ? '#f97316' : '#93c5fd'
 
   return (
@@ -545,55 +692,63 @@ export default function CampusMap() {
       <SkyAtmosphere />
       <Stars />
 
-      {/* Lighting */}
       <ambientLight intensity={ambientIntensity} color={ambientColor} />
       <directionalLight
-        position={[40, 60, 30]}
+        position={[35, 55, 25]}
         intensity={mainLightIntensity}
         color={mainLightColor}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
-        shadow-camera-left={-65}
-        shadow-camera-right={65}
-        shadow-camera-top={65}
-        shadow-camera-bottom={-65}
-        shadow-bias={-0.0005}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+        shadow-bias={-0.0006}
       />
-      {/* Sky bounce fill - dimmed at night */}
-      <directionalLight position={[-30, 40, -20]} intensity={0.3 * (1.0 - nightFactor)} color="#bae6fd" />
+      <directionalLight position={[-25, 35, -20]} intensity={0.25 * (1.0 - nightFactor)} color="#bae6fd" />
 
-      {/* Ground */}
-      <Ground />
+      {/* Main Ground */}
+      <Ground onGroundClick={handleGroundClick} />
 
       {/* Grass zones */}
-      {GREEN_ZONES.map((g, i) => <GrassZone key={i} pos={g.pos} size={g.size} />)}
+      {GREEN_ZONES.map((g, i) => (
+        <GrassZone key={i} pos={g.pos} size={g.size} onGroundClick={handleGroundClick} />
+      ))}
 
-      {/* Concrete paths */}
-      {PATHS.map((p, i) => <Path key={i} pos={p.pos} size={p.size} />)}
+      {/* Concrete path networks */}
+      {PATHS.map((p, i) => (
+        <Path key={i} pos={p.pos} size={p.size} onGroundClick={handleGroundClick} />
+      ))}
 
-      {/* Buildings */}
-      {CAMPUS_BUILDINGS.map(b => <Building key={b.id} b={b} />)}
+      {/* Buildings & interactive areas */}
+      {CAMPUS_BUILDINGS.map((b) => (
+        <Building key={b.id} b={b} onGroundClick={handleGroundClick} />
+      ))}
 
       {/* Street Lamps */}
-      {LAMP_POSITIONS.map((pos, i) => <StreetLamp key={i} pos={pos} />)}
+      {LAMP_POSITIONS.map((pos, i) => (
+        <StreetLamp key={i} pos={pos} />
+      ))}
 
-      {/* Trees */}
-      {TREE_POSITIONS.map((pos, i) => <Tree key={i} pos={pos} />)}
+      {/* Campus Trees */}
+      {TREE_POSITIONS.map((pos, i) => (
+        <Tree key={i} pos={pos} />
+      ))}
 
-      {/* Entrance sign area */}
+      {/* Landmark entrance sign */}
       <CampusEntranceSign />
 
-      {/* Campus boundary wall (perimeter) */}
+      {/* Outer boundary wall */}
       {[
-        { pos: [0, 1, -52], size: [110, 2, 0.5] },
-        { pos: [0, 1, 52],  size: [110, 2, 0.5] },
-        { pos: [-55, 1, 0], size: [0.5, 2, 104] },
-        { pos: [55, 1, 0],  size: [0.5, 2, 104] },
+        { pos: [0, 1.2, -51], size: [106, 2.4, 0.6] },
+        { pos: [0, 1.2, 51],  size: [106, 2.4, 0.6] },
+        { pos: [-53, 1.2, 0], size: [0.6, 2.4, 102] },
+        { pos: [53, 1.2, 0],  size: [0.6, 2.4, 102] },
       ].map((w, i) => (
         <mesh key={`wall-${i}`} position={w.pos} castShadow>
           <boxGeometry args={w.size} />
-          <meshStandardMaterial color="#4a3820" roughness={0.9} />
+          <meshStandardMaterial color="#475569" roughness={0.8} />
         </mesh>
       ))}
     </group>

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from app.db.models.game import GameSession, UserGameStats
 from app.game.task_manager import task_manager
+from app.game.evidence_manager import evidence_manager
 
 
 def resolve_game(
@@ -51,7 +52,7 @@ def resolve_game(
             'player_id': player_id,
             'username': player_names.get(player_id, player_id),
             'role': role,
-            'evidence_collected': 0,  # filled by event log
+            'evidence_collected': evidence_manager.get_player_collected_count(room_code, player_id),
             'tasks_completed': tasks_done,
             'points_earned': score,
             'won': won,

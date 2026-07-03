@@ -1,11 +1,13 @@
-import time
+import time as _time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Optional
+from jose import jwt, JWTError
 
 from app.core.config import settings
+from app.core import security
 from app.api.v1.api import api_router
-from app.game.lobby_manager import lobby_manager
+from app.game.lobby_manager import lobby_manager, PlayerLobbyState
 from app.game.role_service import assign_roles
 from app.game.evidence_manager import evidence_manager
 from app.game.task_manager import task_manager
@@ -15,6 +17,19 @@ from app.game.meeting_manager import meeting_manager
 from app.game.resolution_service import resolve_game
 from app.game.cctv_service import get_or_create_cctv_engine, cleanup_cctv_engine
 from app.game.correlation_engine import correlation_engine
+from app.db.base import Base
+from app.db.session import engine, SessionLocal
+
+
+def verify_ws_token(token: str, expected_user_id: int) -> bool:
+    """Validate a JWT and confirm its subject matches expected_user_id."""
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[security.ALGORITHM])
+        return int(payload.get("sub", -1)) == expected_user_id
+    except (JWTError, ValueError):
+        return False
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -34,6 +49,12 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 
+# ── Create all DB tables on startup ──
+@app.on_event("startup")
+def on_startup():
+    Base.metadata.create_all(bind=engine)
+
+
 # ──────────────────────────────────────────────────────────────
 # In-memory game session state (per room)
 # ──────────────────────────────────────────────────────────────
@@ -50,10 +71,14 @@ class GameSessionState:
     def elapsed_seconds(self) -> int:
         if not self.is_active:
             return 0
-        return int(time.time() - self.started_at)
+        return int(_time.time() - self.started_at)
 
 # room_code -> GameSessionState
 active_game_states: Dict[str, GameSessionState] = {}
+
+# Reconnection tracking: room_code -> {pid_str: disconnect_timestamp}
+disconnected_players: Dict[str, Dict[str, float]] = {}
+RECONNECT_GRACE_SECONDS = 60
 
 
 # ──────────────────────────────────────────────────────────────
@@ -64,7 +89,7 @@ async def broadcast_to_room(room_code: str, message: dict):
     room = lobby_manager.get_room(room_code)
     if not room:
         return
-    for player in room.players.values():
+    for player in list(room.players.values()):
         if player.websocket:
             try:
                 await player.websocket.send_json(message)
@@ -105,19 +130,27 @@ def health_check():
 # Lobby WebSocket — waiting room management
 # ──────────────────────────────────────────────────────────────
 @app.websocket("/ws/lobby/{room_code}/{player_id}")
-async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_id: str):
+async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_id: str, token: str = ""):
     await websocket.accept()
+    room_code = room_code.upper()
+
+    try:
+        p_id_check = int(player_id)
+    except ValueError:
+        await websocket.send_json({"type": "ERROR", "payload": {"message": "Invalid player ID."}})
+        await websocket.close(code=1008)
+        return
+
+    if not verify_ws_token(token, p_id_check):
+        await websocket.send_json({"type": "ERROR", "payload": {"message": "Invalid or missing auth token."}})
+        await websocket.close(code=1008)
+        return
+
+    p_id = p_id_check  # already validated above
 
     room = lobby_manager.get_room(room_code)
     if not room:
         await websocket.send_json({"type": "ERROR", "payload": {"message": f"Room '{room_code}' not found."}})
-        await websocket.close(code=1008)
-        return
-
-    try:
-        p_id = int(player_id)
-    except ValueError:
-        await websocket.send_json({"type": "ERROR", "payload": {"message": "Invalid player ID."}})
         await websocket.close(code=1008)
         return
 
@@ -159,12 +192,28 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                 result = assign_roles(player_ids_str, difficulty=room.difficulty)
 
                 # Store game state
+                # Create DB Game Session row
+                db_session = SessionLocal()
+                db_session_id = None
+                try:
+                    from app.db.models.game import GameSession
+                    db_gs = GameSession(status="playing", difficulty=room.difficulty)
+                    db_session.add(db_gs)
+                    db_session.commit()
+                    db_session.refresh(db_gs)
+                    db_session_id = db_gs.id
+                except Exception as e:
+                    print(f"Failed to create GameSession in DB: {e}")
+                finally:
+                    db_session.close()
+
                 gs = GameSessionState()
+                gs.db_session_id = db_session_id
                 gs.assignments = result['assignments']
                 gs.mastermind_id = result['mastermind_id']
                 gs.conspirator_id = result['conspirator_id']
                 gs.modifiers = result['modifiers']
-                gs.started_at = time.time()
+                gs.started_at = _time.time()
                 gs.is_active = True
                 active_game_states[room_code] = gs
 
@@ -229,7 +278,7 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                     })
 
     except WebSocketDisconnect:
-        lobby_manager.leave_room(room_code, p_id)
+        player.websocket = None
         await lobby_manager.broadcast_state(room_code)
 
 
@@ -237,9 +286,21 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
 # Game WebSocket — live gameplay events
 # ──────────────────────────────────────────────────────────────
 @app.websocket("/ws/game/{room_code}/{player_id}")
-async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_id: str):
-    # Always accept first — returning before accept causes HTTP 500 on client
+async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_id: str, token: str = ""):
     await websocket.accept()
+    room_code = room_code.upper()
+
+    try:
+        p_id_check = int(player_id)
+    except ValueError:
+        await websocket.send_json({"type": "ERROR", "payload": {"message": "Invalid player ID."}})
+        await websocket.close(code=1008)
+        return
+
+    if not verify_ws_token(token, p_id_check):
+        await websocket.send_json({"type": "ERROR", "payload": {"message": "Invalid or missing auth token."}})
+        await websocket.close(code=1008)
+        return
 
     room = lobby_manager.get_room(room_code)
     if not room:
@@ -260,7 +321,17 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
         await websocket.close(code=1008)
         return
 
-    player.websocket = websocket
+    # Reconnection handling — clear grace period entry if this player was disconnected
+    pid_str_early = str(p_id)
+    if room_code in disconnected_players and pid_str_early in disconnected_players[room_code]:
+        del disconnected_players[room_code][pid_str_early]
+        player.websocket = websocket
+        await broadcast_to_room(room_code, {
+            "type": "PLAYER_RECONNECTED",
+            "payload": {"player_id": pid_str_early}
+        })
+    else:
+        player.websocket = websocket
 
     gs = active_game_states.get(room_code)
     if not gs:
@@ -278,6 +349,43 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             return
 
     player_names = {str(pid): p.username for pid, p in room.players.items()}
+    pid_str = str(p_id)
+    role = gs.assignments.get(pid_str)
+    if role:
+        reveal = {
+            'role': role,
+            'partner_id': gs.conspirator_id if role == 'MASTERMIND' else (gs.mastermind_id if role == 'CONSPIRATOR' else None),
+            'partner_role': 'CONSPIRATOR' if role == 'MASTERMIND' else ('MASTERMIND' if role == 'CONSPIRATOR' else None),
+        }
+        partner_name = player_names.get(reveal['partner_id']) if reveal.get('partner_id') else None
+        
+        # 1. Send private role reveal
+        await websocket.send_json({
+            "type": "ROLE_REVEAL",
+            "payload": {
+                **reveal,
+                "partner_name": partner_name,
+                "timer_seconds": gs.modifiers.get('timer_seconds', 1200),
+                "difficulty": room.difficulty,
+            }
+        })
+        
+        # 2. Send personalized game state
+        player_tasks = task_manager.get_player_tasks(room_code, pid_str)
+        player_abilities = ability_manager.get_player_abilities(room_code, pid_str)
+        all_evidence_public = [
+            e.to_dict() for e in evidence_manager.get_room_evidence(room_code)
+            if not e.is_destroyed
+        ]
+        await websocket.send_json({
+            "type": "GAME_STATE",
+            "payload": {
+                "tasks": player_tasks,
+                "abilities": player_abilities,
+                "evidence": all_evidence_public,
+                "role": role,
+            }
+        })
 
     try:
         while True:
@@ -353,6 +461,22 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                 target_player = data.get("target_player_id")
                 target_area = data.get("target_area")
                 target_npc = data.get("target_npc_id")
+
+                # Server-side role gate — mirror ability_manager.py ABILITY_DEFINITIONS
+                DETECTIVE_ONLY = {"CCTV_ANALYSIS", "CORRELATE_EVIDENCE", "DIGITAL_ANALYSIS", "RECOVER_LOGS"}
+                VILLAIN_ONLY   = {"PLANT_FAKE_EVIDENCE", "DESTROY_EVIDENCE", "TRIGGER_MEETING",
+                                  "MANIPULATE_NPC", "FRAME_PLAYER", "SECURE_PERIMETER", "CREATE_ALIBI"}
+                player_role = gs.assignments.get(pid_str)
+                if ability_id in DETECTIVE_ONLY and player_role != "DETECTIVE":
+                    await send_to_player(room_code, p_id, {
+                        "type": "ERROR", "payload": {"message": "Not authorized for this ability."}
+                    })
+                    continue
+                if ability_id in VILLAIN_ONLY and player_role not in ("MASTERMIND", "CONSPIRATOR"):
+                    await send_to_player(room_code, p_id, {
+                        "type": "ERROR", "payload": {"message": "Not authorized for this ability."}
+                    })
+                    continue
 
                 result = ability_manager.use_ability(room_code, pid_str, ability_id)
                 if result and result['success']:
@@ -593,7 +717,6 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "payload": {**mtg.to_dict(), "triggered_by": "MIDPOINT"}
                         })
 
-                # Timer expiry → move to accusation phase
                 timer_limit = gs.modifiers.get('timer_seconds', 1200)
                 if gs.is_active and elapsed >= timer_limit:
                     gs.is_active = False
@@ -611,16 +734,21 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                     "mastermind_accusation": data.get("mastermind_accusation"),
                     "conspirator_accusation": data.get("conspirator_accusation"),
                 }
-                result = resolve_game(
-                    room_code=room_code,
-                    assignments=gs.assignments,
-                    mastermind_id=gs.mastermind_id,
-                    conspirator_id=gs.conspirator_id,
-                    accusation=accusation,
-                    player_names=player_names,
-                    session_db_id=None,
-                    db=None,
-                )
+                db = SessionLocal()
+                try:
+                    result = resolve_game(
+                        room_code=room_code,
+                        assignments=gs.assignments,
+                        mastermind_id=gs.mastermind_id,
+                        conspirator_id=gs.conspirator_id,
+                        accusation=accusation,
+                        player_names=player_names,
+                        session_db_id=getattr(gs, 'db_session_id', None),
+                        db=db,
+                    )
+                    db.commit()
+                finally:
+                    db.close()
                 gs.is_active = False
                 room.status = "finished"
                 await broadcast_to_room(room_code, {
@@ -630,9 +758,11 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
 
     except WebSocketDisconnect:
         player.websocket = None
+        pid_str_dc = str(p_id)
+        disconnected_players.setdefault(room_code, {})[pid_str_dc] = _time.time()
         await broadcast_to_room(room_code, {
             "type": "PLAYER_DISCONNECTED",
-            "payload": {"player_id": pid_str}
+            "payload": {"player_id": pid_str_dc, "grace_seconds": RECONNECT_GRACE_SECONDS}
         })
 
     finally:

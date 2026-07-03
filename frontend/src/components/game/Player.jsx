@@ -1,7 +1,9 @@
-import React, { useRef, useEffect, useMemo } from 'react'
+import React, { useRef, useEffect, useMemo, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import useGameStore from '../../store/gameStore'
+import { generateGrid, findPath } from '../../utils/pathfinder'
 
 /* ──────────────────────────────────────────────────────────────
    HUMAN STUDENT CHARACTER
@@ -251,8 +253,12 @@ function OtherPlayerCharacter({ data }) {
   const colors = ['#3b82f6', '#22c55e', '#ec4899', '#f97316', '#a855f7', '#06b6d4']
   const color = colors[parseInt(data.player_id || '0') % colors.length]
 
+  const pos = data.position
+    ? [data.position.x, data.position.y ?? 0.5, data.position.z]
+    : [0, 0.5, 0]
+
   return (
-    <group position={data.position || [0, 0, 0]}>
+    <group position={pos}>
       {/* Simplified human silhouette */}
       <mesh position={[0, 0.9, 0]} castShadow>
         <capsuleGeometry args={[0.17, 0.7, 8, 12]} />
@@ -273,20 +279,57 @@ function OtherPlayerCharacter({ data }) {
   )
 }
 
+/* ── Ray-Box AABB Intersection for Camera Collision ── */
+function intersectRayAABB(rayStart, rayDir, boxMin, boxMax) {
+  let tmin = -Infinity
+  let tmax = Infinity
+
+  for (let i = 0; i < 3; i++) {
+    const startCoord = i === 0 ? rayStart.x : (i === 1 ? rayStart.y : rayStart.z)
+    const dirCoord = i === 0 ? rayDir.x : (i === 1 ? rayDir.y : rayDir.z)
+    const boxMinCoord = i === 0 ? boxMin.x : (i === 1 ? boxMin.y : boxMin.z)
+    const boxMaxCoord = i === 0 ? boxMax.x : (i === 1 ? boxMax.y : boxMax.z)
+
+    if (Math.abs(dirCoord) < 1e-6) {
+      if (startCoord < boxMinCoord || startCoord > boxMaxCoord) {
+        return null
+      }
+    } else {
+      const invD = 1.0 / dirCoord
+      let t1 = (boxMinCoord - startCoord) * invD
+      let t2 = (boxMaxCoord - startCoord) * invD
+
+      if (t1 > t2) {
+        const temp = t1
+        t1 = t2
+        t2 = temp
+      }
+
+      tmin = Math.max(tmin, t1)
+      tmax = Math.min(tmax, t2)
+
+      if (tmin > tmax) return null
+    }
+  }
+
+  return tmin >= 0 ? tmin : null
+}
+
 /* ══════════════════════════════════════════════
    MAIN PLAYER
    ══════════════════════════════════════════════ */
 export default function Player() {
   const groupRef = useRef()
   const bodyRef = useRef()
+  const controlsRef = useRef()
   const { camera } = useThree()
+  
+  const [isWalkingState, setIsWalkingState] = useState(false)
+  const [isRunningState, setIsRunningState] = useState(false)
+
   const velocity = useRef(new THREE.Vector3())
   const direction = useRef(new THREE.Vector3())
   const rotationRef = useRef(0)
-  const cameraYawRef = useRef(0)
-  const cameraPitchRef = useRef(0.5) // Initial vertical angle look-down
-  const isWalkingRef = useRef(false)
-  const isRunningRef = useRef(false)
   const movSendTimer = useRef(0)
 
   const role = useGameStore((s) => s.role)
@@ -299,6 +342,32 @@ export default function Player() {
   const updateTask = useGameStore((s) => s.updateTask)
   const ws = useGameStore((s) => s.ws)
   const otherPlayers = useGameStore((s) => s.otherPlayers)
+  const clickTarget = useGameStore((s) => s.clickTarget)
+  const setClickTarget = useGameStore((s) => s.setClickTarget)
+  const setCameraYaw = useGameStore((s) => s.setCameraYaw)
+
+  const initialPosition = useGameStore((s) => s.playerPosition) // [0, 0.5, -35]
+  const prevPos = useRef(new THREE.Vector3(initialPosition[0], 0, initialPosition[2]))
+
+  const pathWaypoints = useRef([])
+  const currentWaypointIndex = useRef(0)
+  const walkGrid = useMemo(() => generateGrid(campusAreas), [campusAreas])
+
+  // Recalculate path when clickTarget changes
+  useEffect(() => {
+    if (clickTarget && groupRef.current) {
+      const start = groupRef.current.position.clone()
+      const end = new THREE.Vector3(clickTarget[0], 0.5, clickTarget[2])
+      const path = findPath(start, end, walkGrid)
+      if (path.length > 0) {
+        pathWaypoints.current = path
+        currentWaypointIndex.current = 0
+      } else {
+        pathWaypoints.current = []
+        setClickTarget(null)
+      }
+    }
+  }, [clickTarget, walkGrid, setClickTarget])
 
   const keysRef = useRef({
     forward: false, backward: false,
@@ -318,68 +387,88 @@ export default function Player() {
     const down = (e) => {
       const a = keyMap[e.code]
       if (a) { keysRef.current[a] = true; if (a === 'sprint') setSprinting(true) }
+
+      // Camera shortcuts
+      if (controlsRef.current && groupRef.current) {
+        const p = groupRef.current.position
+        if (e.code === 'KeyR') {
+          controlsRef.current.target.set(p.x, 0.5, p.z)
+          camera.position.set(p.x, 18, p.z + 16)
+          controlsRef.current.update()
+        } else if (e.code === 'Digit1') {
+          controlsRef.current.target.set(p.x, 0.5, p.z)
+          camera.position.set(p.x, 32, p.z + 0.1)
+          controlsRef.current.update()
+        } else if (e.code === 'Digit2') {
+          controlsRef.current.target.set(p.x, 0.5, p.z)
+          camera.position.set(p.x, 22, p.z + 22)
+          controlsRef.current.update()
+        } else if (e.code === 'Digit3') {
+          controlsRef.current.target.set(p.x, 0.5, p.z)
+          camera.position.set(p.x, 15, p.z + 24)
+          controlsRef.current.update()
+        }
+      }
     }
     const up = (e) => {
       const a = keyMap[e.code]
       if (a) { keysRef.current[a] = false; if (a === 'sprint') setSprinting(false) }
     }
+    const handleDblClick = () => {
+      if (controlsRef.current && groupRef.current) {
+        const p = groupRef.current.position
+        controlsRef.current.target.set(p.x, 0.5, p.z)
+        camera.position.set(p.x, camera.position.y, p.z + 18)
+        controlsRef.current.update()
+      }
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
-  }, [setSprinting])
-
-  // Drag-to-look orbit controls using mouse / trackpad
-  useEffect(() => {
-    let isDragging = false
-    let startX = 0
-    let startY = 0
-
-    const handlePointerDown = (e) => {
-      // Only drag with left click (0) on the main 3D canvas (ignore HUD, minimap, etc.)
-      if (e.button !== 0) return
-      if (e.target.tagName !== 'CANVAS' || e.target.id === 'minimap-canvas') return
-
-      isDragging = true
-      startX = e.clientX
-      startY = e.clientY
-    }
-
-    const handlePointerMove = (e) => {
-      if (!isDragging) return
-      const dx = e.clientX - startX
-      const dy = e.clientY - startY
-      startX = e.clientX
-      startY = e.clientY
-
-      // Adjust camera yaw (horizontal rotation)
-      cameraYawRef.current -= dx * 0.006
-
-      // Adjust camera pitch (vertical tilt, clamp to avoid clipping below ground or going upside down)
-      cameraPitchRef.current = THREE.MathUtils.clamp(
-        cameraPitchRef.current + dy * 0.005,
-        0.05, // look almost horizontally
-        1.35  // look almost straight down
-      )
-    }
-
-    const handlePointerUp = () => {
-      isDragging = false
-    }
-
-    window.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-
+    window.addEventListener('dblclick', handleDblClick)
     return () => {
-      window.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('dblclick', handleDblClick)
     }
-  }, [])
+  }, [setSprinting, camera])
 
-  // AABB collision
+  // Set initial camera view once mounted
+  useEffect(() => {
+    if (controlsRef.current) {
+      controlsRef.current.target.set(initialPosition[0], 0.5, initialPosition[2])
+      camera.position.set(initialPosition[0], 18, initialPosition[2] + 16)
+      controlsRef.current.update()
+    }
+  }, [camera, initialPosition])
+
+  // AABB collision - ignores walkable areas and allows center gate passage
   function checkCollision(pos) {
     for (const area of campusAreas) {
+      // Walkable areas that have no physical barriers blocking the player
+      if (
+        area.id === 'basketball_court' ||
+        area.id === 'basketball_court_left' ||
+        area.id === 'hockey_court' ||
+        area.id === 'plants_trees' ||
+        area.id === 'park_garden' ||
+        area.id === 'birds_park' ||
+        area.id === 'sitting_area' ||
+        area.id === 'parking'
+      ) {
+        continue
+      }
+      if (area.id === 'front_gate' || area.id === 'back_gate') {
+        const [ax, , az] = area.position
+        const [aw, , ad] = area.size
+        const inZ = pos.z > az - ad/2 - 0.5 && pos.z < az + ad/2 + 0.5
+        // gap is in the middle of front/back gate (e.g. from x=-1.8 to x=1.8)
+        const leftPillar = pos.x > ax - aw/2 - 0.5 && pos.x < ax - 1.8
+        const rightPillar = pos.x > ax + 1.8 && pos.x < ax + aw/2 + 0.5
+        if (inZ && (leftPillar || rightPillar)) {
+          return area
+        }
+        continue
+      }
       const [ax, , az] = area.position
       const [aw, , ad] = area.size
       if (pos.x > ax - aw/2 - 0.5 && pos.x < ax + aw/2 + 0.5 &&
@@ -397,23 +486,56 @@ export default function Player() {
     const keys = keysRef.current
     const speed = keys.sprint ? PLAYER_SPEED_BASE * SPRINT_MULT : PLAYER_SPEED_BASE
 
+    const hasKeyboardInput = keys.forward || keys.backward || keys.left || keys.right
+    if (hasKeyboardInput && clickTarget) {
+      pathWaypoints.current = []
+      setClickTarget(null)
+    }
+
     direction.current.set(0, 0, 0)
-    if (keys.forward)  direction.current.z -= 1
-    if (keys.backward) direction.current.z += 1
-    if (keys.left)     direction.current.x -= 1
-    if (keys.right)    direction.current.x += 1
+    if (hasKeyboardInput) {
+      if (keys.forward)  direction.current.z -= 1
+      if (keys.backward) direction.current.z += 1
+      if (keys.left)     direction.current.x -= 1
+      if (keys.right)    direction.current.x += 1
+    } else if (pathWaypoints.current.length > 0) {
+      const currentPos = groupRef.current.position
+      let targetWaypoint = pathWaypoints.current[currentWaypointIndex.current]
+      const dx = targetWaypoint.x - currentPos.x
+      const dz = targetWaypoint.z - currentPos.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
+
+      if (dist < 0.35) {
+        currentWaypointIndex.current++
+        if (currentWaypointIndex.current >= pathWaypoints.current.length) {
+          pathWaypoints.current = []
+          setClickTarget(null)
+        } else {
+          targetWaypoint = pathWaypoints.current[currentWaypointIndex.current]
+          direction.current.set(targetWaypoint.x - currentPos.x, 0, targetWaypoint.z - currentPos.z)
+        }
+      } else {
+        direction.current.set(dx, 0, dz)
+      }
+    }
 
     const moving = direction.current.lengthSq() > 0
-    isWalkingRef.current = moving && !keys.sprint
-    isRunningRef.current = moving && keys.sprint
+    const walking = moving && !keys.sprint
+    const running = moving && keys.sprint
+
+    // Trigger state change for student leg swings/animations only when needed
+    if (isWalkingState !== walking) setIsWalkingState(walking)
+    if (isRunningState !== running) setIsRunningState(running)
 
     if (moving) {
       direction.current.normalize()
-      const camAngle = Math.atan2(
-        camera.position.x - groupRef.current.position.x,
-        camera.position.z - groupRef.current.position.z
-      )
-      direction.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), camAngle + Math.PI)
+      if (hasKeyboardInput) {
+        const camAngle = Math.atan2(
+          camera.position.x - groupRef.current.position.x,
+          camera.position.z - groupRef.current.position.z
+        )
+        direction.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), camAngle + Math.PI)
+      }
       rotationRef.current = Math.atan2(direction.current.x, direction.current.z)
     }
 
@@ -431,42 +553,85 @@ export default function Player() {
       if (!checkCollision(xOnly)) groupRef.current.position.x = candidate.x
       const zOnly = groupRef.current.position.clone(); zOnly.z = candidate.z
       if (!checkCollision(zOnly)) groupRef.current.position.z = candidate.z
+
+      // Clear path on collision to prevent sliding/getting stuck
+      if (pathWaypoints.current.length > 0) {
+        pathWaypoints.current = []
+        setClickTarget(null)
+      }
     }
 
     groupRef.current.rotation.y = THREE.MathUtils.lerp(
       groupRef.current.rotation.y, rotationRef.current, 0.12
     )
 
-    // Third-person camera — orbit around player using mouse/trackpad yaw & pitch
-    const camDist = keys.sprint ? 7.5 : 6.0
-    const horizontalDist = camDist * Math.cos(cameraPitchRef.current)
-    const verticalDist = camDist * Math.sin(cameraPitchRef.current)
+    // Camera follow and target tracking
+    const currentPos = groupRef.current.position
+    if (controlsRef.current) {
+      const deltaX = currentPos.x - prevPos.current.x
+      const deltaZ = currentPos.z - prevPos.current.z
 
-    // Calculate base offset
-    const cameraOffset = new THREE.Vector3(
-      Math.sin(cameraYawRef.current) * horizontalDist,
-      verticalDist,
-      Math.cos(cameraYawRef.current) * horizontalDist
-    )
+      // Move camera and OrbitControls target along with the player
+      camera.position.x += deltaX
+      camera.position.z += deltaZ
+      
+      controlsRef.current.target.x += deltaX
+      controlsRef.current.target.z += deltaZ
+      
+      // Clamp target within safe boundaries
+      controlsRef.current.target.x = THREE.MathUtils.clamp(controlsRef.current.target.x, -45, 45)
+      controlsRef.current.target.z = THREE.MathUtils.clamp(controlsRef.current.target.z, -45, 45)
+      controlsRef.current.target.y = 0.8
 
-    // Add shoulder offset to the side (over-the-shoulder camera)
-    const shoulderOffset = new THREE.Vector3(0.55, 0.15, 0)
-    shoulderOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYawRef.current - Math.PI / 2)
+      controlsRef.current.update()
 
-    const targetCamPos = groupRef.current.position.clone()
-      .add(cameraOffset)
-      .add(shoulderOffset)
+      // Calculate cameraYaw for FOV rendering on minimap
+      const targetDirX = controlsRef.current.target.x - camera.position.x
+      const targetDirZ = controlsRef.current.target.z - camera.position.z
+      const yaw = Math.atan2(targetDirX, targetDirZ)
+      setCameraYaw(yaw)
 
-    camera.position.lerp(targetCamPos, 0.09) // smooth follow with camera lag
+      // Perform camera collision check against building obstacles
+      const playerHeadPos = new THREE.Vector3(currentPos.x, 1.2, currentPos.z)
+      const idealCamPos = camera.position.clone()
+      const rayDir = idealCamPos.clone().sub(playerHeadPos)
+      const distance = rayDir.length()
+      rayDir.normalize()
 
-    // Add movement head-bob camera shake
-    if (moving) {
-      const bobFreq = keys.sprint ? 0.016 : 0.010
-      const bobAmp = keys.sprint ? 0.035 : 0.015
-      const bob = Math.sin(Date.now() * bobFreq) * bobAmp
-      camera.position.y += bob
-      camera.position.x += bob * 0.3
+      let closestT = distance
+
+      for (const area of campusAreas) {
+        if (
+          area.id === 'basketball_court' ||
+          area.id === 'basketball_court_left' ||
+          area.id === 'hockey_court' ||
+          area.id === 'plants_trees' ||
+          area.id === 'park_garden' ||
+          area.id === 'birds_park' ||
+          area.id === 'sitting_area' ||
+          area.id === 'parking'
+        ) {
+          continue
+        }
+
+        const [bx, , bz] = area.position
+        const [bw, bh, bd] = area.size
+
+        const boxMin = new THREE.Vector3(bx - bw / 2, 0, bz - bd / 2)
+        const boxMax = new THREE.Vector3(bx + bw / 2, bh + 0.5, bz + bd / 2)
+
+        const t = intersectRayAABB(playerHeadPos, rayDir, boxMin, boxMax)
+        if (t !== null && t < closestT) {
+          closestT = t
+        }
+      }
+
+      if (closestT < distance) {
+        const safeT = Math.max(1.8, closestT - 0.5) // Keep camera buffer distance
+        camera.position.copy(playerHeadPos).addScaledVector(rayDir, safeT)
+      }
     }
+    prevPos.current.copy(currentPos)
 
     // Dynamic FOV based on speed/sprint
     const targetFov = keys.sprint ? 72 : 60
@@ -474,13 +639,6 @@ export default function Player() {
       camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1)
       camera.updateProjectionMatrix()
     }
-
-    // Look at player chest/head
-    camera.lookAt(
-      groupRef.current.position.x + shoulderOffset.x * 0.5,
-      groupRef.current.position.y + 1.25,
-      groupRef.current.position.z + shoulderOffset.z * 0.5
-    )
 
     // Update store
     const p = groupRef.current.position
@@ -528,14 +686,33 @@ export default function Player() {
   return (
     <>
       {/* Self player */}
-      <group ref={groupRef} position={[0, 0, 0]}>
+      <group ref={groupRef} position={[initialPosition[0], 0, initialPosition[2]]} scale={[1.18, 1.18, 1.18]}>
         {/* Player character */}
         <StudentBody
           role={role}
-          isWalking={isWalkingRef.current}
-          isRunning={isRunningRef.current}
+          isWalking={isWalkingState}
+          isRunning={isRunningState}
           bodyRef={bodyRef}
         />
+
+        {/* Occlusion indicator: floats above the head, rendered on top of everything */}
+        <mesh position={[0, 2.3, 0]} renderOrder={9999}>
+          <sphereGeometry args={[0.12, 16, 16]} />
+          <meshBasicMaterial
+            color={
+              role === 'DETECTIVE'
+                ? '#06b6d4'
+                : role === 'MASTERMIND'
+                ? '#ef4444'
+                : role === 'INVESTIGATOR'
+                ? '#10b981'
+                : '#f43f5e'
+            }
+            depthTest={false}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
 
         {/* Ground shadow ring */}
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -553,12 +730,13 @@ export default function Player() {
           />
         </mesh>
 
-        {/* Subtle personal point light */}
+        {/* High-intensity personal point light for player visibility */}
         <pointLight
-          position={[0, 1.5, 0]}
-          intensity={3}
-          distance={5}
-          color={role === 'DETECTIVE' ? '#60a8ff' : '#ff6090'}
+          position={[0, 2.2, 0]}
+          intensity={8}
+          distance={10}
+          color={role === 'DETECTIVE' ? '#a5f3fc' : '#fecdd3'}
+          castShadow
         />
       </group>
 
@@ -566,6 +744,17 @@ export default function Player() {
       {Object.entries(otherPlayers).map(([pid, data]) => (
         <OtherPlayerCharacter key={pid} data={{ ...data, player_id: pid }} />
       ))}
+
+      {/* Orbit controls for click-and-drag, pan, and zoom */}
+      <OrbitControls
+        ref={controlsRef}
+        enableDamping={true}
+        dampingFactor={0.06}
+        minDistance={3.5}
+        maxDistance={85}
+        maxPolarAngle={85 * Math.PI / 180}
+        minPolarAngle={30 * Math.PI / 180}
+      />
     </>
   )
 }

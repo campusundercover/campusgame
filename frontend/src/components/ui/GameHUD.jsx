@@ -9,50 +9,33 @@ import CCTVReportPanel from './CCTVReportPanel'
 
 /* ── Christ University Campus Minimap ── */
 // Faithfully represents the aerial photo layout
-const CAMPUS_BUILDINGS = [
-  // Gates
-  { label: 'FRONT GATE',    x: 0.48, y: 0.04, w: 0.10, h: 0.04, color: '#6b7280', type: 'gate' },
-  { label: 'BACK GATE',     x: 0.35, y: 0.93, w: 0.10, h: 0.03, color: '#6b7280', type: 'gate' },
-  // Top area
-  { label: 'VEHICLE ENTRY', x: 0.04, y: 0.08, w: 0.12, h: 0.05, color: '#4b5563', type: 'misc' },
-  { label: 'PARKING',       x: 0.04, y: 0.14, w: 0.13, h: 0.09, color: '#374151', type: 'parking' },
-  { label: 'AUDI BLOCK',    x: 0.22, y: 0.09, w: 0.15, h: 0.09, color: '#7c3aed', type: 'academic' },
-  { label: 'JUNIOR COLLEGE',x: 0.20, y: 0.18, w: 0.17, h: 0.06, color: '#7c2d12', type: 'academic' },
-  { label: 'PLANTS & TREES',x: 0.55, y: 0.07, w: 0.18, h: 0.10, color: '#15803d', type: 'green', isGreen: true },
-  { label: 'CANTEEN',       x: 0.79, y: 0.12, w: 0.08, h: 0.03, color: '#b45309', type: 'canteen' },
-  { label: 'CANTEEN',       x: 0.79, y: 0.16, w: 0.08, h: 0.03, color: '#b45309', type: 'canteen' },
-  { label: 'CANTEEN',       x: 0.79, y: 0.20, w: 0.08, h: 0.03, color: '#b45309', type: 'canteen' },
-  // Middle-left
-  { label: 'CENTRAL BLOCK', x: 0.14, y: 0.25, w: 0.20, h: 0.20, color: '#9a3412', type: 'academic', isMain: true },
-  { label: 'CANTEEN',       x: 0.03, y: 0.33, w: 0.08, h: 0.04, color: '#b45309', type: 'canteen' },
-  { label: 'BASKET COURT',  x: 0.38, y: 0.22, w: 0.14, h: 0.10, color: '#1d4ed8', type: 'sports', isCourt: true },
-  { label: 'BLOCK-1',       x: 0.78, y: 0.27, w: 0.12, h: 0.15, color: '#9a3412', type: 'academic' },
-  // Middle
-  { label: 'SITTING AREA',  x: 0.25, y: 0.44, w: 0.10, h: 0.06, color: '#374151', type: 'misc' },
-  { label: 'PARK GARDEN',   x: 0.45, y: 0.38, w: 0.18, h: 0.14, color: '#16a34a', type: 'green', isGreen: true },
-  { label: 'BASKET COURT',  x: 0.05, y: 0.45, w: 0.10, h: 0.08, color: '#1d4ed8', type: 'sports', isCourt: true },
-  { label: 'HOCKEY COURT',  x: 0.05, y: 0.53, w: 0.12, h: 0.06, color: '#065f46', type: 'sports' },
-  { label: 'BLOCK-2',       x: 0.44, y: 0.52, w: 0.18, h: 0.14, color: '#9a3412', type: 'academic' },
-  // Lower
-  { label: 'SHE BLOCK',     x: 0.18, y: 0.60, w: 0.14, h: 0.06, color: '#be185d', type: 'hostel' },
-  { label: 'BOYS HOSTEL',   x: 0.16, y: 0.66, w: 0.16, h: 0.10, color: '#7c3aed', type: 'hostel' },
-  { label: 'BIRDS PARK',    x: 0.44, y: 0.68, w: 0.14, h: 0.07, color: '#15803d', type: 'green', isGreen: true },
-  { label: 'CANTEEN',       x: 0.66, y: 0.67, w: 0.14, h: 0.10, color: '#b45309', type: 'canteen' },
-  // Bottom
-  { label: 'BLOCK-4',       x: 0.12, y: 0.76, w: 0.16, h: 0.10, color: '#9a3412', type: 'academic' },
-  { label: 'R&D BLOCK',     x: 0.14, y: 0.86, w: 0.14, h: 0.07, color: '#581c87', type: 'research' },
-  { label: 'GIRLS HOSTEL',  x: 0.38, y: 0.83, w: 0.20, h: 0.09, color: '#9a3412', type: 'hostel' },
-  // Paths
+/* ── Christ University Campus Minimap ── */
+// Roads in 3D world coordinates
+const PATHS_3D = [
+  { pos: [4, 0], size: [5, 100] },      // Central road
+  { pos: [-22, 0], size: [3, 100] },    // Left road
+  { pos: [29, 0], size: [3, 100] },     // Right road
+  { pos: [0, -30], size: [80, 3] },     // Upper crossroad
+  { pos: [0, 10], size: [80, 3] },      // Middle crossroad
+  { pos: [0, 36], size: [80, 3] }       // Lower crossroad
 ]
 
-const CAMPUS_TREES = [
-  { x: 0.07, y: 0.04, r: 0.025 }, { x: 0.12, y: 0.06, r: 0.02 },
-  { x: 0.87, y: 0.08, r: 0.02 }, { x: 0.92, y: 0.12, r: 0.02 },
-  { x: 0.90, y: 0.40, r: 0.02 }, { x: 0.85, y: 0.50, r: 0.025 },
-  { x: 0.88, y: 0.60, r: 0.02 }, { x: 0.07, y: 0.72, r: 0.02 },
-  { x: 0.30, y: 0.79, r: 0.02 }, { x: 0.32, y: 0.90, r: 0.025 },
-  { x: 0.65, y: 0.80, r: 0.02 }, { x: 0.70, y: 0.88, r: 0.02 },
-  { x: 0.80, y: 0.75, r: 0.025 }, { x: 0.84, y: 0.82, r: 0.02 },
+// Lawns in 3D world coordinates
+const GREEN_ZONES_3D = [
+  { pos: [20, -38], size: [26, 14] },   // Plants & Trees Area
+  { pos: [20, -2], size: [16, 16] },    // Park Garden
+  { pos: [20, 30], size: [14, 10] },    // Birds Park
+  { pos: [-22, -44], size: [16, 8] }    // Upper Left Garden
+]
+
+// Trees in 3D world coordinates
+const TREES_3D = [
+  [-18, -45], [-12, -45], [12, -45], [18, -45],
+  [24, -14], [24, -8], [24, 18], [24, 24],
+  [-32, -8], [-32, 0], [-32, 8],
+  [-4, 24], [4, 24], [-4, 38], [4, 38],
+  [16, 30], [20, 30], [-16, 30],
+  [22, -38], [24, -36], [20, -40]
 ]
 
 function ChristUniversityMinimap() {
@@ -61,6 +44,7 @@ function ChristUniversityMinimap() {
   const playerRotation = useGameStore((s) => s.playerRotation)
   const campusAreas = useGameStore((s) => s.campusAreas)
   const otherPlayers = useGameStore((s) => s.otherPlayers)
+  const cameraYaw = useGameStore((s) => s.cameraYaw)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -70,147 +54,262 @@ function ChristUniversityMinimap() {
 
     ctx.clearRect(0, 0, W, H)
 
-    // Background - dark campus ground
-    ctx.fillStyle = '#1a2510'
+    // Dark sleek background
+    ctx.fillStyle = '#0f172a'
     ctx.fillRect(0, 0, W, H)
 
-    // Campus boundary outline - diagonal/irregular polygon matching aerial view
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    // Grid details for tactical radar look
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)'
     ctx.lineWidth = 1
-    ctx.strokeRect(2, 2, W - 4, H - 4)
+    const gridSize = 15
+    for (let x = 0; x < W; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+    }
+    for (let y = 0; y < H; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
+    }
 
-    // Draw paths/roads
-    ctx.strokeStyle = '#374151'
-    ctx.lineWidth = 2
-    // Main vertical path
-    ctx.beginPath(); ctx.moveTo(W * 0.40, H * 0.05); ctx.lineTo(W * 0.40, H * 0.95); ctx.stroke()
-    // Horizontal paths
-    ctx.beginPath(); ctx.moveTo(W * 0.05, H * 0.24); ctx.lineTo(W * 0.90, H * 0.24); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(W * 0.05, H * 0.52); ctx.lineTo(W * 0.90, H * 0.52); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(W * 0.05, H * 0.76); ctx.lineTo(W * 0.90, H * 0.76); ctx.stroke()
-
-    // Draw green areas first (behind buildings)
-    CAMPUS_BUILDINGS.filter(b => b.isGreen).forEach(b => {
-      ctx.fillStyle = '#15803d'
-      ctx.globalAlpha = 0.5
-      ctx.fillRect(b.x * W, b.y * H, b.w * W, b.h * H)
-      ctx.globalAlpha = 1
-      // Add tree texture dots
-      for (let i = 0; i < 6; i++) {
-        ctx.beginPath()
-        ctx.arc(
-          b.x * W + Math.random() * b.w * W,
-          b.y * H + Math.random() * b.h * H,
-          2, 0, Math.PI * 2
-        )
-        ctx.fillStyle = '#22c55e'; ctx.fill()
-      }
-    })
-
-    // Draw buildings
-    CAMPUS_BUILDINGS.filter(b => !b.isGreen).forEach(b => {
-      const bx = b.x * W, by = b.y * H, bw = b.w * W, bh = b.h * H
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'
-      ctx.fillRect(bx + 2, by + 2, bw, bh)
-
-      // Building body
-      ctx.fillStyle = b.color
-      ctx.globalAlpha = 0.85
-      ctx.fillRect(bx, by, bw, bh)
-      ctx.globalAlpha = 1
-
-      // Roof highlight (lighter top edge)
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'
-      ctx.fillRect(bx, by, bw, 2)
-      ctx.fillRect(bx, by, 2, bh)
-
-      // Court markings
-      if (b.isCourt) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-        ctx.lineWidth = 0.5
-        // Center circle
-        ctx.beginPath()
-        ctx.arc(bx + bw / 2, by + bh / 2, Math.min(bw, bh) * 0.2, 0, Math.PI * 2)
-        ctx.stroke()
-        // Center line
-        ctx.beginPath(); ctx.moveTo(bx + bw / 2, by); ctx.lineTo(bx + bw / 2, by + bh); ctx.stroke()
-      }
-
-      // Label (small text)
-      if (bw > W * 0.07) {
-        ctx.fillStyle = 'rgba(255,255,255,0.85)'
-        ctx.font = `bold ${Math.max(5, Math.min(7, bw * 0.18))}px "Outfit", sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        const maxChars = Math.floor(bw / 4)
-        const label = b.label.length > maxChars ? b.label.slice(0, maxChars) + '…' : b.label
-        ctx.fillText(label, bx + bw / 2, by + bh / 2)
-      }
-    })
-
-    // Draw trees
-    CAMPUS_TREES.forEach(t => {
-      const tx = t.x * W, ty = t.y * H, tr = t.r * Math.min(W, H)
-      ctx.beginPath()
-      ctx.arc(tx, ty, tr, 0, Math.PI * 2)
-      ctx.fillStyle = '#15803d'
-      ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1
-      ctx.beginPath()
-      ctx.arc(tx - tr * 0.2, ty - tr * 0.2, tr * 0.5, 0, Math.PI * 2)
-      ctx.fillStyle = '#22c55e'; ctx.globalAlpha = 0.6; ctx.fill(); ctx.globalAlpha = 1
-    })
-
-    // Player position mapping (3D world to minimap)
-    // World range: roughly -30 to +30 in both axes
+    // World coordinate limits mapping
     const worldToMap = (wx, wz) => {
-      const nx = (wx + 30) / 60  // normalize 0-1
-      const ny = (wz + 30) / 60
+      const nx = (wx + 53) / 106
+      const ny = (wz + 53) / 106
       return [nx * W, ny * H]
     }
 
-    // Other players
-    Object.values(otherPlayers).forEach((p, i) => {
-      if (!p.position) return
-      const [px, py] = worldToMap(p.position[0], p.position[2])
-      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2)
-      ctx.fillStyle = '#94a3b8'; ctx.fill()
-      ctx.strokeStyle = 'white'; ctx.lineWidth = 1; ctx.stroke()
+    // Draw lawns (Grass)
+    GREEN_ZONES_3D.forEach(g => {
+      const [gx1, gy1] = worldToMap(g.pos[0] - g.size[0]/2, g.pos[1] - g.size[1]/2)
+      const [gx2, gy2] = worldToMap(g.pos[0] + g.size[0]/2, g.pos[1] + g.size[1]/2)
+      ctx.fillStyle = '#14532d'
+      ctx.globalAlpha = 0.5
+      ctx.fillRect(gx1, gy1, gx2 - gx1, gy2 - gy1)
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = '#166534'
+      ctx.lineWidth = 0.8
+      ctx.strokeRect(gx1, gy1, gx2 - gx1, gy2 - gy1)
     })
 
-    // Self (triangle indicator)
+    // Draw pathways/roads
+    PATHS_3D.forEach(p => {
+      const [rx1, ry1] = worldToMap(p.pos[0] - p.size[0]/2, p.pos[1] - p.size[1]/2)
+      const [rx2, ry2] = worldToMap(p.pos[0] + p.size[0]/2, p.pos[1] + p.size[1]/2)
+      ctx.fillStyle = '#334155'
+      ctx.fillRect(rx1, ry1, rx2 - rx1, ry2 - ry1)
+    })
+
+    // Draw campus buildings (mapped from gameStore campusAreas dynamically)
+    campusAreas.forEach(area => {
+      const [ax, , az] = area.position
+      const [aw, , ad] = area.size
+
+      // Filter lawn zones which are already drawn
+      if (
+        area.id === 'plants_trees' ||
+        area.id === 'park_garden' ||
+        area.id === 'birds_park' ||
+        area.id === 'sitting_area'
+      ) {
+        return
+      }
+
+      const [x1, y1] = worldToMap(ax - aw/2, az - ad/2)
+      const [x2, y2] = worldToMap(ax + aw/2, az + ad/2)
+      const bw = x2 - x1
+      const bh = y2 - y1
+
+      let fillColor = '#475569'
+      let strokeColor = '#1e293b'
+      let textColor = '#cbd5e1'
+      const label = area.name
+
+      // Color logic based on building classification
+      if (area.id.includes('gate')) {
+        fillColor = '#1e293b'
+        strokeColor = '#475569'
+        textColor = '#94a3b8'
+      } else if (area.id.includes('court') || area.id.includes('hockey')) {
+        fillColor = area.id.includes('hockey') ? 'rgba(6, 95, 70, 0.45)' : 'rgba(29, 78, 216, 0.45)'
+        strokeColor = area.id.includes('hockey') ? '#059669' : '#3b82f6'
+        textColor = area.id.includes('hockey') ? '#a7f3d0' : '#bfdbfe'
+      } else if (area.id.includes('canteen')) {
+        fillColor = '#78350f'
+        strokeColor = '#d97706'
+        textColor = '#fde68a'
+      } else if (area.id.includes('hostel') || area.id.includes('she_block')) {
+        fillColor = '#581c87'
+        strokeColor = '#c084fc'
+        textColor = '#f3e8ff'
+      } else if (area.id.includes('parking')) {
+        fillColor = '#1e293b'
+        strokeColor = '#64748b'
+        textColor = '#cbd5e1'
+      } else {
+        // Academic blocks
+        fillColor = '#7c2d12'
+        strokeColor = '#ea580c'
+        textColor = '#ffedd5'
+      }
+
+      // Draw shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+      ctx.fillRect(x1 + 1.5, y1 + 1.5, bw, bh)
+
+      // Draw building block
+      ctx.fillStyle = fillColor
+      ctx.fillRect(x1, y1, bw, bh)
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1.2
+      ctx.strokeRect(x1, y1, bw, bh)
+
+      // Sports court line markings
+      if (area.id.includes('court')) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
+        ctx.lineWidth = 0.8
+        ctx.strokeRect(x1 + 2, y1 + 2, bw - 4, bh - 4)
+        ctx.beginPath()
+        ctx.arc(x1 + bw/2, y1 + bh/2, Math.min(bw, bh) * 0.22, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+
+      // Readable label abbreviations
+      let shortName = label
+      if (label === 'Central Block') shortName = 'CB'
+      else if (label === 'Junior College') shortName = 'JC'
+      else if (label === 'Auditorium' || label === 'Audi Block') shortName = 'AB'
+      else if (label === 'R&D Block') shortName = 'RD'
+      else if (label === 'Girls Hostel') shortName = 'GH'
+      else if (label === 'She Block / Boys Hostel') shortName = 'BH'
+      else if (label.includes('Canteen')) {
+        if (label.includes('Top')) shortName = 'C1'
+        else if (label.includes('Middle')) shortName = 'C2'
+        else if (label.includes('Bottom Right')) shortName = 'C4'
+        else shortName = 'C3'
+      } else if (label.includes('Basket Ball')) {
+        shortName = label.includes('Left') ? 'BK-L' : 'BK-R'
+      } else if (label.includes('Hockey')) {
+        shortName = 'Hock'
+      } else if (label.includes('Parking')) {
+        shortName = 'PRK'
+      }
+
+      ctx.fillStyle = textColor
+      ctx.font = 'bold 8px "Outfit", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(shortName, x1 + bw/2, y1 + bh/2)
+    })
+
+    // Draw tree indicators
+    TREES_3D.forEach(t => {
+      const [tx, ty] = worldToMap(t[0], t[1])
+      ctx.beginPath()
+      ctx.arc(tx, ty, 2.5, 0, Math.PI * 2)
+      ctx.fillStyle = '#166534'
+      ctx.fill()
+      ctx.beginPath()
+      ctx.arc(tx - 0.5, ty - 0.5, 1.2, 0, Math.PI * 2)
+      ctx.fillStyle = '#22c55e'
+      ctx.fill()
+    })
+
+    // Render other players
+    Object.values(otherPlayers).forEach(p => {
+      if (!p.position) return
+      const [px, py] = worldToMap(p.position.x || p.position[0], p.position.z || p.position[2])
+      ctx.beginPath(); ctx.arc(px, py, 3.8, 0, Math.PI * 2)
+      ctx.fillStyle = '#94a3b8'
+      ctx.fill()
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    })
+
+    // Draw Self FOV Cone (camera viewing direction indicator)
     const [sx, sy] = worldToMap(playerPosition[0], playerPosition[2])
     ctx.save()
-    ctx.translate(sx, sy)
-    ctx.rotate(playerRotation)
-    ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(-4, 5); ctx.lineTo(4, 5); ctx.closePath()
-    ctx.fillStyle = '#f43f5e'; ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(sx, sy)
+    const startAngle = cameraYaw - (25 * Math.PI / 180) - Math.PI / 2
+    const endAngle = cameraYaw + (25 * Math.PI / 180) - Math.PI / 2
+    const radius = 38
+    ctx.arc(sx, sy, radius, startAngle, endAngle)
+    ctx.closePath()
+    const coneGrad = ctx.createRadialGradient(sx, sy, 2, sx, sy, radius)
+    coneGrad.addColorStop(0, 'rgba(6, 182, 212, 0.4)')
+    coneGrad.addColorStop(1, 'rgba(6, 182, 212, 0.0)')
+    ctx.fillStyle = coneGrad
+    ctx.fill()
     ctx.restore()
-    // Pulse ring
-    ctx.beginPath(); ctx.arc(sx, sy, 8, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(244,63,94,0.4)'; ctx.lineWidth = 1.5; ctx.stroke()
 
-    // North indicator
-    ctx.fillStyle = 'rgba(255,255,255,0.7)'
-    ctx.font = 'bold 8px Outfit'
+    // Draw Self Arrow Indicator (player facing direction)
+    ctx.save()
+    ctx.translate(sx, sy)
+    ctx.rotate(playerRotation - Math.PI / 2)
+    ctx.beginPath()
+    ctx.moveTo(5.5, 0)
+    ctx.lineTo(-5.5, -3.5)
+    ctx.lineTo(-3.5, 0)
+    ctx.lineTo(-5.5, 3.5)
+    ctx.closePath()
+    ctx.fillStyle = '#f43f5e'
+    ctx.fill()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    // Pulse ring around the player
+    ctx.beginPath(); ctx.arc(sx, sy, 7.5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.5)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+
+    // North arrow indicator
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = 'bold 9px "Outfit", sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('N', W - 8, 12)
+    ctx.fillText('N', W - 10, 14)
 
-    // Border
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)'
+    // Modern glass border outline
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
     ctx.lineWidth = 1.5
     ctx.strokeRect(0, 0, W, H)
 
-  }, [playerPosition, playerRotation, otherPlayers])
+  }, [playerPosition, playerRotation, otherPlayers, campusAreas, cameraYaw])
 
   return (
     <div className="minimap-wrapper">
-      <div className="minimap-label">CHRIST UNIVERSITY</div>
+      <div className="minimap-label">CAMPUS RADAR MAP</div>
       <canvas ref={canvasRef} width={220} height={280} className="minimap-canvas" id="minimap-canvas" />
-      <div className="minimap-legend">
-        <span className="minimap-legend-dot" style={{ background: '#f43f5e' }} /> You
-        <span className="minimap-legend-dot" style={{ background: '#94a3b8' }} /> Others
+      <div className="minimap-legend" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '0.2rem 0.5rem',
+        fontSize: '0.52rem',
+        marginTop: '0.3rem',
+        padding: '0.3rem 0.5rem',
+        background: 'rgba(15, 23, 42, 0.6)',
+        borderRadius: '6px',
+        border: '1px solid rgba(255, 255, 255, 0.08)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#7c2d12' }} /> Academic Blocks
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#581c87' }} /> Hostels
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#1d4ed8' }} /> Sports Courts
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#78350f' }} /> Cafeterias
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#14532d' }} /> Gardens / Lawns
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#06b6d4' }} /> View Cone (FOV)
+        </div>
       </div>
     </div>
   )
