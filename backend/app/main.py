@@ -1,4 +1,5 @@
 import time as _time
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Optional
@@ -655,7 +656,7 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                                 "sender_id": pid_str,
                                 "sender_name": player_names.get(pid_str, "Unknown"),
                                 "message": message,
-                                "timestamp": time.time(),
+                                "timestamp": _time.time(),
                             }
                         })
                 else:
@@ -666,7 +667,7 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "sender_id": pid_str,
                             "sender_name": player_names.get(pid_str, "Unknown"),
                             "message": message,
-                            "timestamp": time.time(),
+                            "timestamp": _time.time(),
                         }
                     })
 

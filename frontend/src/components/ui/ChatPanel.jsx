@@ -59,13 +59,21 @@ export default function ChatPanel() {
 
   const sendMessage = () => {
     const msg = input.trim()
-    if (!msg || !ws) return
-    ws.send(JSON.stringify({
-      action: 'CHAT_MESSAGE',
-      channel: chatChannel,
-      message: msg,
-    }))
-    setInput('')
+    if (!msg) return
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn('[Chat] Cannot send message: WebSocket is not open.')
+      return
+    }
+    try {
+      ws.send(JSON.stringify({
+        action: 'CHAT_MESSAGE',
+        channel: chatChannel,
+        message: msg,
+      }))
+      setInput('')
+    } catch (err) {
+      console.error('[Chat] Send failed:', err)
+    }
   }
 
   const handleKeyDown = (e) => {
