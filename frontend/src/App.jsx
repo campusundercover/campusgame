@@ -98,6 +98,7 @@ function useGameWebSocket(roomCode, playerId) {
   const updateAbility = useGameStore((s) => s.updateAbility)
   const showNpcDialog = useGameStore((s) => s.showNpcDialog)
   const addChatMessage = useGameStore((s) => s.addChatMessage)
+  const incrementEvidenceCollected = useGameStore((s) => s.incrementEvidenceCollected)
   const setMeetingActive = useGameStore((s) => s.setMeetingActive)
   const setMeetingTimeRemaining = useGameStore((s) => s.setMeetingTimeRemaining)
   const setGameResult = useGameStore((s) => s.setGameResult)
@@ -149,6 +150,15 @@ function useGameWebSocket(roomCode, playerId) {
           case 'PLAYER_DISCONNECTED': removeOtherPlayer(payload.player_id); break
           case 'GAME_OVER': setGameResult(payload); break
           case 'CHAT_MESSAGE': addChatMessage(payload); break
+          case 'EVIDENCE_COLLECTED':
+            removeWorldEvidence(payload.evidence.evidence_id)
+            if (String(payload.collector_id) === String(playerId)) {
+              incrementEvidenceCollected()
+            }
+            break
+          case 'EVIDENCE_BOARD_UPDATE': setEvidenceBoard(payload.board); break
+          case 'EVIDENCE_APPEARED': addWorldEvidence(payload.evidence); break
+          case 'EVIDENCE_DESTROYED': removeWorldEvidence(payload.evidence_id); break
           default: break
         }
       } catch (e) { console.error('[WS] Parse error:', e) }

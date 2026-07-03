@@ -40,7 +40,7 @@ const CAMPUS_BUILDINGS = [
   // 5. Junior College
   {
     id: 'junior_college', name: 'Junior College',
-    pos: [-12, 0, -26], size: [18, 7, 8],
+    pos: [-10, 0, -24.5], size: [18, 7, 8],
     color: '#7c2d12', roofColor: '#4a1a08',
     facade: '/locations/classroom.png',
     windows: true, floors: 3
@@ -48,7 +48,7 @@ const CAMPUS_BUILDINGS = [
   // 6. Central Block (hollow courtyard layout)
   {
     id: 'central_block', name: 'Central Block',
-    pos: [-12, 0, -6], size: [22, 12, 18],
+    pos: [-9, 0, -6], size: [20, 12, 18],
     color: '#8a3412', roofColor: '#5a1a08',
     windows: true, floors: 5, isHero: true, isCentral: true
   },
@@ -69,7 +69,7 @@ const CAMPUS_BUILDINGS = [
   // 9. Canteen (Right Top)
   {
     id: 'canteen_right_top', name: 'Canteen (Right Top)',
-    pos: [34, 0, -27], size: [6, 4, 4],
+    pos: [34, 0, -26], size: [6, 4, 4],
     color: '#7c3d00', roofColor: '#4a2400',
     windows: true, floors: 2
   },
@@ -90,7 +90,7 @@ const CAMPUS_BUILDINGS = [
   // 12. Block - 1
   {
     id: 'block_1', name: 'Block - 1',
-    pos: [32, 0, 4], size: [8, 8, 14],
+    pos: [34.5, 0, 3.5], size: [8, 8, 10],
     color: '#3b1c57', roofColor: '#1e0a2e',
     windows: true, floors: 4
   },
@@ -104,7 +104,7 @@ const CAMPUS_BUILDINGS = [
   // 14. Block - 2
   {
     id: 'block_2', name: 'Block - 2',
-    pos: [20, 0, 18], size: [16, 8, 12],
+    pos: [19, 0, 18], size: [16, 8, 12],
     color: '#7c3412', roofColor: '#4a1a08',
     windows: true, floors: 4
   },
@@ -118,7 +118,7 @@ const CAMPUS_BUILDINGS = [
   // 16. Canteen (Bottom Right)
   {
     id: 'canteen_bot_right', name: 'Canteen (Bottom Right)',
-    pos: [30, 0, 42], size: [10, 5, 12],
+    pos: [34.5, 0, 44], size: [8, 5, 10],
     color: '#7c3d00', roofColor: '#4a2400',
     windows: true, floors: 2
   },
@@ -132,49 +132,49 @@ const CAMPUS_BUILDINGS = [
   // 18. R&D Block
   {
     id: 'rd_block', name: 'R&D Block',
-    pos: [-28, 0, 42], size: [14, 6, 10],
+    pos: [-30.5, 0, 43], size: [14, 6, 8],
     color: '#3b1c57', roofColor: '#1e0a2e',
     windows: true, floors: 3
   },
   // 19. Block - 4
   {
     id: 'block_4', name: 'Block - 4',
-    pos: [-28, 0, 30], size: [14, 7, 10],
+    pos: [-30.5, 0, 29.5], size: [14, 7, 8],
     color: '#7c3412', roofColor: '#4a1a08',
     windows: true, floors: 3
   },
   // 20. She Block / Boys Hostel
   {
     id: 'she_block', name: 'She Block / Boys Hostel',
-    pos: [-28, 0, 18], size: [16, 7, 10],
+    pos: [-31.5, 0, 18], size: [16, 7, 10],
     color: '#7c185d', roofColor: '#4a0a38',
     windows: true, floors: 3
   },
   // 21. Hockey Court
   {
     id: 'hockey_court', name: 'Hockey Court',
-    pos: [-30, 0, 5], size: [14, 0.2, 10],
+    pos: [-31, 0, 4.5], size: [14, 0.2, 8],
     color: '#065f46', roofColor: '#065f46',
     isHockeyCourt: true
   },
   // 22. Basket Ball Court (Left)
   {
     id: 'basketball_court_left', name: 'Basket Ball Court (Left)',
-    pos: [-30, 0, -5], size: [14, 0.2, 10],
+    pos: [-31, 0, -5], size: [14, 0.2, 10],
     color: '#1d4ed8', roofColor: '#1d4ed8',
     isCourt: true
   },
   // 23. Sitting Area
   {
     id: 'sitting_area', name: 'Sitting Area',
-    pos: [-12, 0, 10], size: [12, 0.15, 10],
+    pos: [-12, 0, 16.5], size: [12, 0.15, 10],
     color: '#475569', roofColor: '#374151',
     isSittingArea: true
   },
   // 24. Girls Hostel
   {
     id: 'girls_hostel', name: 'Girls Hostel',
-    pos: [10, 0, 42], size: [18, 6, 10],
+    pos: [17, 0, 42.5], size: [14, 6, 10],
     color: '#7c3412', roofColor: '#4a1a08',
     windows: true, floors: 3
   }

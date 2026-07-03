@@ -1,3 +1,4 @@
+from fastapi import WebSocket
 import random
 import string
 import logging

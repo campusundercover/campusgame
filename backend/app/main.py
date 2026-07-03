@@ -429,6 +429,27 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             # ── Collect evidence ──
             elif action == "COLLECT_EVIDENCE":
                 ev_id = data.get("evidence_id")
+                all_ev = evidence_manager.get_room_evidence(room_code)
+                ev_item = next((e for e in all_ev if e.evidence_id == ev_id), None)
+                if not ev_item:
+                    continue
+
+                # Server-side distance validation
+                player_pos_data = getattr(gs, 'player_positions', {}).get(pid_str)
+                if player_pos_data and 'position' in player_pos_data:
+                    p_pos = player_pos_data['position']
+                    ev_pos = ev_item.position
+                    dx = p_pos.get('x', 0) - ev_pos.get('x', 0)
+                    dz = p_pos.get('z', 0) - ev_pos.get('z', 0)
+                    dist = (dx * dx + dz * dz) ** 0.5
+                    # Validate that player is within reasonable collect radius (e.g., 3.8 units including latency buffer)
+                    if dist > 3.8:
+                        await send_to_player(room_code, p_id, {
+                            "type": "ERROR",
+                            "payload": {"message": "Too far away to collect evidence."}
+                        })
+                        continue
+
                 item = evidence_manager.collect_evidence(room_code, ev_id, pid_str)
                 if item:
                     # Log action for NPC observation system

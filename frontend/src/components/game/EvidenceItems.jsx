@@ -1,5 +1,6 @@
-import React, { useRef } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import useGameStore from '../../store/gameStore'
 
@@ -47,10 +48,8 @@ function SingleEvidenceItem({ item, index }) {
     ? [item.position.x, 0.9, item.position.z]
     : [ax + spread[0], 0.9, az + spread[1]]
 
-  const playerPosition          = useGameStore((s) => s.playerPosition)
-  const ws                      = useGameStore((s) => s.ws)
-  const incrementEvidenceCollected = useGameStore((s) => s.incrementEvidenceCollected)
-  const removeWorldEvidence     = useGameStore((s) => s.removeWorldEvidence)
+  const playerPosition = useGameStore((s) => s.playerPosition)
+  const ws             = useGameStore((s) => s.ws)
 
   useFrame((_, delta) => {
     const t = Date.now() * 0.001
@@ -83,13 +82,28 @@ function SingleEvidenceItem({ item, index }) {
     }
   })
 
-  const handleClick = () => {
-    if (ws) {
+  const handleCollect = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ action: 'COLLECT_EVIDENCE', evidence_id: item.evidence_id }))
     }
-    incrementEvidenceCollected()
-    removeWorldEvidence(item.evidence_id)
   }
+
+  /* Listen for "E" interact key when near evidence item */
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'e' || e.key === 'E') {
+        const latestPos = useGameStore.getState().playerPosition
+        const dx = latestPos[0] - pos[0]
+        const dz = latestPos[2] - pos[2]
+        const dist = Math.sqrt(dx * dx + dz * dz)
+        if (dist < COLLECT_RADIUS) {
+          handleCollect()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pos, ws])
 
   const dx   = playerPosition[0] - pos[0]
   const dz   = playerPosition[2] - pos[2]
@@ -97,7 +111,7 @@ function SingleEvidenceItem({ item, index }) {
   const near = dist < COLLECT_RADIUS
 
   return (
-    <group position={pos} onClick={handleClick}>
+    <group position={pos} onClick={handleCollect}>
       {/* ── Floating gem ── */}
       <mesh ref={meshRef} castShadow>
         <octahedronGeometry args={[0.26, 0]} />
@@ -153,12 +167,37 @@ function SingleEvidenceItem({ item, index }) {
         <meshBasicMaterial color={glowColor} transparent opacity={0.18} />
       </mesh>
 
-      {/* ── 'E to collect' prompt plane (only when very near) ── */}
+      {/* ── 'E to collect' HTML tooltip hovering above ── */}
       {near && (
-        <mesh position={[0, 0.8, 0]} rotation={[0, 0, 0]}>
-          <planeGeometry args={[1.4, 0.3]} />
-          <meshBasicMaterial color="#0a0813" transparent opacity={0.82} side={THREE.DoubleSide} />
-        </mesh>
+        <Html position={[0, 0.75, 0]} center distanceFactor={8}>
+          <div style={{
+            background: 'rgba(10, 8, 19, 0.92)',
+            color: '#ffffff',
+            border: `1px solid ${glowColor}`,
+            padding: '4px 10px',
+            borderRadius: '6px',
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: '12px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            textTransform: 'uppercase',
+            fontWeight: 'bold',
+          }}>
+            <span style={{
+              background: glowColor,
+              color: '#000000',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              fontSize: '10px',
+              fontWeight: '900',
+            }}>E</span>
+            <span>Collect {TYPE_LABELS[item.evidence_type] || 'Evidence'}</span>
+          </div>
+        </Html>
       )}
     </group>
   )
