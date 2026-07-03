@@ -327,30 +327,39 @@ function Timer() {
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      tickTimer()
+      // 1. Tick timer locally
+      useGameStore.getState().tickTimer()
+
+      // 2. Read latest values from store dynamically inside stable interval
+      const state = useGameStore.getState()
+      const currentWs = state.ws
+      const currentPos = state.playerPosition
+      const area = state.currentArea
 
       // Send server heartbeat — drives NPC movement, midpoint checks, area tracking
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: 'TIMER_TICK' }))
+      if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+        currentWs.send(JSON.stringify({ action: 'TIMER_TICK' }))
 
         // Every 5 seconds record movement for CCTV
         cctvTickRef.current += 1
         if (cctvTickRef.current >= 5) {
           cctvTickRef.current = 0
-          ws.send(JSON.stringify({
-            action: 'RECORD_MOVEMENT',
-            position: {
-              x: playerPosition[0],
-              y: playerPosition[1],
-              z: playerPosition[2],
-            },
-            area: currentArea || 'Campus Grounds',
-          }))
+          if (currentPos && currentPos.length >= 3) {
+            currentWs.send(JSON.stringify({
+              action: 'RECORD_MOVEMENT',
+              position: {
+                x: currentPos[0],
+                y: currentPos[1],
+                z: currentPos[2],
+              },
+              area: area || 'Campus Grounds',
+            }))
+          }
         }
       }
     }, 1000)
     return () => clearInterval(intervalRef.current)
-  }, [tickTimer, ws, playerPosition, currentArea])
+  }, [])
 
   const minutes  = Math.floor(timeRemaining / 60)
   const seconds  = timeRemaining % 60
