@@ -534,7 +534,7 @@ export default function Player() {
           camera.position.x - groupRef.current.position.x,
           camera.position.z - groupRef.current.position.z
         )
-        direction.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), camAngle + Math.PI)
+        direction.current.applyAxisAngle(new THREE.Vector3(0, 1, 0), camAngle)
       }
       rotationRef.current = Math.atan2(direction.current.x, direction.current.z)
     }
