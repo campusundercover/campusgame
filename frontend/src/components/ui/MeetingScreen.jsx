@@ -57,18 +57,7 @@ export default function MeetingScreen() {
   useEffect(() => {
     if (!meetingActive) return
     setPhase(meetingTimeRemaining > 30 ? 'discuss' : 'vote')
-    timerRef.current = setInterval(() => {
-      setMeetingTimeRemaining((prev) => {
-        if (prev <= 1) { clearInterval(timerRef.current); setMeetingActive(false); return 0 }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(timerRef.current)
-  }, [meetingActive])
-
-  useEffect(() => {
-    if (meetingTimeRemaining <= 30 && phase === 'discuss') setPhase('vote')
-  }, [meetingTimeRemaining])
+  }, [meetingActive, meetingTimeRemaining])
 
   if (!meetingActive) return null
 

@@ -1,74 +1,389 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Wrench, 
+  Folder, 
+  Clipboard, 
+  Video, 
+  Printer, 
+  FlaskConical, 
+  Tv, 
+  Utensils, 
+  MapPin, 
+  Award, 
+  Clock, 
+  AlertCircle, 
+  ChevronDown, 
+  ChevronUp, 
+  Navigation,
+  CheckCircle2,
+  XCircle,
+  Play
+} from 'lucide-react'
 import useGameStore from '../../store/gameStore'
 
-const TASK_TYPE_ICONS = {
-  REPAIR_NETWORK: '🔧',
-  ARCHIVE_FILES: '📁',
-  SUBMIT_ATTENDANCE: '📋',
-  CHECK_CCTV: '📷',
-  RETRIEVE_PRINT: '🖨️',
-  RESTOCK_LAB: '🧪',
-  SETUP_AUDITORIUM: '🎭',
-  PLACE_LUNCH: '🍽️',
+/* Area coordinates matching the 3D map */
+const AREA_WORLD_POSITIONS = {
+  'Research Center':  [28, -20],
+  'Computer Lab':     [28,   0],
+  'Security Office':  [-30,  4],
+  'MCA Department':   [ 8,  14],
+  'Main Block':       [-10, -8],
+  'Auditorium':       [-28,-28],
+  'Library':          [-24, 22],
+  'Cafeteria':        [ 32, 16],
 }
 
-function TaskItem({ task }) {
-  const ws = useGameStore((s) => s.ws)
-  const playerId = useGameStore((s) => s.playerId)
+/* Dynamic role-aware text mapping */
+const TASK_MAPPINGS = {
+  INVESTIGATOR: {
+    REPAIR_NETWORK: { name: 'Repair Network Terminal', category: 'Digital Forensics', desc: 'The network interface in the Computer Lab has crashed. Reset the router and reconnect the optic terminals.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    ARCHIVE_FILES: { name: 'Archive Research Files', category: 'Evidence', desc: 'Secure the cryptographic project files in the Library database. Save the backup on local tape storage.', priority: 'HIGH', priorityColor: '#f59e0b' },
+    SUBMIT_ATTENDANCE: { name: 'Submit Attendance Logs', category: 'Investigation', desc: 'Collect current class attendance logs from the MCA department and upload them to the registrar.', priority: 'LOW', priorityColor: '#94a3b8' },
+    CHECK_CCTV: { name: 'Check CCTV Feeds', category: 'Digital Forensics', desc: 'Analyze logs in the Security Office for unauthorized logins and trace potential system anomalies.', priority: 'CRITICAL', priorityColor: '#f43f5e' },
+    RETRIEVE_PRINT: { name: 'Retrieve Print Job', category: 'Evidence', desc: 'Grab keycard authorization logs printed in the Main Block printer tray before they are overwritten.', priority: 'LOW', priorityColor: '#94a3b8' },
+    RESTOCK_LAB: { name: 'Restock Lab Supplies', category: 'Campus', desc: 'Refill chemical reagents and secure the research workbench at the Research Center.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    SETUP_AUDITORIUM: { name: 'Set Up Auditorium', category: 'Campus', desc: 'Verify stage lights and check the soundboard connections in the Auditorium for the lock-down broadcast.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    PLACE_LUNCH: { name: 'Place Lunch Order', category: 'Campus', desc: 'Submit a catering ticket for the security detail at the Cafeteria terminals.', priority: 'LOW', priorityColor: '#94a3b8' }
+  },
+  DETECTIVE: {
+    REPAIR_NETWORK: { name: 'Repair Network Terminal', category: 'Digital Forensics', desc: 'The network interface in the Computer Lab has crashed. Reset the router and reconnect the optic terminals.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    ARCHIVE_FILES: { name: 'Archive Research Files', category: 'Evidence', desc: 'Secure the cryptographic project files in the Library database. Save the backup on local tape storage.', priority: 'HIGH', priorityColor: '#f59e0b' },
+    SUBMIT_ATTENDANCE: { name: 'Submit Attendance Logs', category: 'Investigation', desc: 'Collect current class attendance logs from the MCA department and upload them to the registrar.', priority: 'LOW', priorityColor: '#94a3b8' },
+    CHECK_CCTV: { name: 'Check CCTV Feeds', category: 'Digital Forensics', desc: 'Analyze logs in the Security Office for unauthorized logins and trace potential system anomalies.', priority: 'CRITICAL', priorityColor: '#f43f5e' },
+    RETRIEVE_PRINT: { name: 'Retrieve Print Job', category: 'Evidence', desc: 'Grab keycard authorization logs printed in the Main Block printer tray before they are overwritten.', priority: 'LOW', priorityColor: '#94a3b8' },
+    RESTOCK_LAB: { name: 'Restock Lab Supplies', category: 'Campus', desc: 'Refill chemical reagents and secure the research workbench at the Research Center.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    SETUP_AUDITORIUM: { name: 'Set Up Auditorium', category: 'Campus', desc: 'Verify stage lights and check the soundboard connections in the Auditorium for the lock-down broadcast.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    PLACE_LUNCH: { name: 'Place Lunch Order', category: 'Campus', desc: 'Submit a catering ticket for the security detail at the Cafeteria terminals.', priority: 'LOW', priorityColor: '#94a3b8' }
+  },
+  CONSPIRATOR: {
+    REPAIR_NETWORK: { name: 'Install Keylogger on Terminal', category: 'Sabotage', desc: 'Deploy an encrypted keylogger on the main laboratory terminal to sniff researcher credentials.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    ARCHIVE_FILES: { name: 'Corrupt Research Database', category: 'Sabotage', desc: 'Inject a logic bomb into the primary research tables in the Library to overwrite the file index structures.', priority: 'HIGH', priorityColor: '#f59e0b' },
+    SUBMIT_ATTENDANCE: { name: 'Falsify Attendance Records', category: 'Deception', desc: 'Modify attendance logs in the MCA Department to establish a fake alibi for the suspect pool.', priority: 'LOW', priorityColor: '#94a3b8' },
+    CHECK_CCTV: { name: 'Disable Security Cameras', category: 'Sabotage', desc: 'Sabotage the CCTV feed loops in the Security Office, creating a blind spot on the east campus wing.', priority: 'CRITICAL', priorityColor: '#f43f5e' },
+    RETRIEVE_PRINT: { name: 'Intercept Keycard Printout', category: 'Sabotage', desc: 'Steal the printed security override sheets in the Main Block before they reach the guard desk.', priority: 'LOW', priorityColor: '#94a3b8' },
+    RESTOCK_LAB: { name: 'Contaminate Chemical Reagents', category: 'Sabotage', desc: 'Tamper with lab chemical formulas at the Research Center to delay database reconstruction efforts.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    SETUP_AUDITORIUM: { name: 'Rig Stage Lights for Failure', category: 'Sabotage', desc: 'Short-circuit the primary power distribution relay in the Auditorium to force an outage.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    PLACE_LUNCH: { name: 'Poison Staff Cafeteria Food', category: 'Deception', desc: 'Spike cafeteria ingredients to incapacitate guards and slow down investigator search routines.', priority: 'LOW', priorityColor: '#94a3b8' }
+  },
+  MASTERMIND: {
+    REPAIR_NETWORK: { name: 'Install Keylogger on Terminal', category: 'Sabotage', desc: 'Deploy an encrypted keylogger on the main laboratory terminal to sniff researcher credentials.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    ARCHIVE_FILES: { name: 'Corrupt Research Database', category: 'Sabotage', desc: 'Inject a logic bomb into the primary research tables in the Library to overwrite the file index structures.', priority: 'HIGH', priorityColor: '#f59e0b' },
+    SUBMIT_ATTENDANCE: { name: 'Falsify Attendance Records', category: 'Deception', desc: 'Modify attendance logs in the MCA Department to establish a fake alibi for the suspect pool.', priority: 'LOW', priorityColor: '#94a3b8' },
+    CHECK_CCTV: { name: 'Disable Security Cameras', category: 'Sabotage', desc: 'Sabotage the CCTV feed loops in the Security Office, creating a blind spot on the east campus wing.', priority: 'CRITICAL', priorityColor: '#f43f5e' },
+    RETRIEVE_PRINT: { name: 'Intercept Keycard Printout', category: 'Sabotage', desc: 'Steal the printed security override sheets in the Main Block before they reach the guard desk.', priority: 'LOW', priorityColor: '#94a3b8' },
+    RESTOCK_LAB: { name: 'Contaminate Chemical Reagents', category: 'Sabotage', desc: 'Tamper with lab chemical formulas at the Research Center to delay database reconstruction efforts.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    SETUP_AUDITORIUM: { name: 'Rig Stage Lights for Failure', category: 'Sabotage', desc: 'Short-circuit the primary power distribution relay in the Auditorium to force an outage.', priority: 'MEDIUM', priorityColor: '#eab308' },
+    PLACE_LUNCH: { name: 'Poison Staff Cafeteria Food', category: 'Deception', desc: 'Spike cafeteria ingredients to incapacitate guards and slow down investigator search routines.', priority: 'LOW', priorityColor: '#94a3b8' }
+  }
+}
+
+const TASK_ICONS = {
+  REPAIR_NETWORK: Wrench,
+  ARCHIVE_FILES: Folder,
+  SUBMIT_ATTENDANCE: Clipboard,
+  CHECK_CCTV: Video,
+  RETRIEVE_PRINT: Printer,
+  RESTOCK_LAB: FlaskConical,
+  SETUP_AUDITORIUM: Tv,
+  PLACE_LUNCH: Utensils,
+}
+
+function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiveTask, distance, role }) {
   const currentArea = useGameStore((s) => s.currentArea)
   const isInZone = currentArea === task.location
-
   const progressPercent = Math.round(task.progress * 100)
-  const icon = TASK_TYPE_ICONS[task.task_type] || '📌'
+  
+  // Get dynamic details based on player role
+  const roleKey = (role && TASK_MAPPINGS[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
+  const details = TASK_MAPPINGS[roleKey][task.task_type] || {
+    name: task.name,
+    category: 'Campus',
+    desc: 'Perform the designated objective.',
+    priority: 'LOW',
+    priorityColor: '#94a3b8'
+  }
+
+  const IconComp = TASK_ICONS[task.task_type] || AlertCircle
+  const isTracked = activeTaskId === task.task_id
+
+  const handleTrackClick = (e) => {
+    e.stopPropagation()
+    if (isTracked) {
+      setActiveTask(null)
+    } else {
+      setActiveTask(task.task_id)
+    }
+  }
+
+  const cardStyle = {
+    '--priority-color': details.priorityColor
+  }
 
   return (
-    <div className={`task-item ${task.completed ? 'completed' : ''} ${isInZone && !task.completed ? 'active-zone' : ''}`}>
-      <div className="task-item-header">
-        <span className="task-icon">{icon}</span>
-        <div className="task-info">
-          <p className="task-name">{task.name}</p>
-          <p className="task-location">📍 {task.location}</p>
+    <motion.div
+      layout
+      style={cardStyle}
+      onClick={onToggleExpand}
+      className={`task-item-card ${task.completed ? 'completed' : ''} ${isInZone && !task.completed ? 'active-zone' : ''} ${isTracked && !task.completed ? 'active-tracked' : ''}`}
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="task-card-main">
+        <div className="task-card-icon-container">
+          <IconComp size={14} />
         </div>
-        <span className="task-points">+{task.points}pts</span>
+        <div className="task-card-details">
+          <div className="task-card-title">{details.name}</div>
+          <div className="task-card-loc-dist">
+            <span>📍 {task.location}</span>
+            {distance !== null && !task.completed && (
+              <span className="task-card-dist">{distance}m</span>
+            )}
+          </div>
+        </div>
+        <div className="task-card-points">+{task.points}pts</div>
       </div>
 
+      {/* Progress bar */}
       {!task.completed && (
-        <div className="task-progress-bar">
-          <div
-            className="task-progress-fill"
+        <div className="task-card-progress-bar">
+          <div 
+            className="task-card-progress-fill" 
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       )}
 
-      {task.completed && (
-        <div className="task-complete-badge">✓ Complete</div>
-      )}
+      {/* Interactive Expandable details */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="task-card-expanded"
+          >
+            <p className="task-desc">{details.desc}</p>
+            
+            <div className="task-metadata-grid">
+              <span className="task-meta-label">Category:</span>
+              <span className="task-meta-value">{details.category}</span>
+              
+              <span className="task-meta-label">Priority:</span>
+              <span className={`task-meta-value priority-${details.priority.toLowerCase()}`}>
+                {details.priority}
+              </span>
+              
+              <span className="task-meta-label">Est. Time:</span>
+              <span className="task-meta-value">{task.duration_seconds}s</span>
+
+              <span className="task-meta-label">Status:</span>
+              <span className={`task-meta-value ${task.completed ? 'status-completed' : 'status-in-progress'}`}>
+                {task.completed ? 'Completed' : task.progress > 0 ? `In Progress (${progressPercent}%)` : 'Not Started'}
+              </span>
+            </div>
+
+            {!task.completed && (
+              <div className="task-actions-row">
+                <button className="task-btn-track" onClick={handleTrackClick}>
+                  {isTracked ? 'UNTRACK' : 'TRACK MISSION'}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {isInZone && !task.completed && (
-        <p className="task-zone-hint">Hold <kbd>E</kbd> to perform task</p>
+        <div className="task-zone-hint">
+          <Navigation size={10} className="animate-pulse" />
+          <span>Objective Area Reached! Hold <kbd>E</kbd></span>
+        </div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
 export default function TaskList() {
   const tasks = useGameStore((s) => s.tasks)
-  const completed = tasks.filter(t => t.completed).length
+  const role = useGameStore((s) => s.role)
+  const playerPosition = useGameStore((s) => s.playerPosition)
+  const activeTaskId = useGameStore((s) => s.activeTaskId)
+  const setActiveTask = useGameStore((s) => s.setActiveTask)
+
+  const [expandedId, setExpandedId] = useState(null)
+  const [filterMode, setFilterMode] = useState('ALL') // ALL | ACTIVE | COMPLETED
+  const [sortBy, setSortBy] = useState('NEAREST') // NEAREST | PRIORITY | REWARD
+  const [showCompletedSection, setShowCompletedSection] = useState(false)
+
+  // Calculate dynamic distances to each task location
+  const taskDistances = {}
+  tasks.forEach(task => {
+    const coords = AREA_WORLD_POSITIONS[task.location]
+    if (coords && playerPosition) {
+      const dx = playerPosition[0] - coords[0]
+      const dz = playerPosition[2] - coords[1]
+      taskDistances[task.task_id] = Math.round(Math.sqrt(dx * dx + dz * dz))
+    } else {
+      taskDistances[task.task_id] = null
+    }
+  })
 
   if (tasks.length === 0) return null
+
+  // Helper to map priority weights
+  const getPriorityWeight = (taskType) => {
+    const roleKey = (role && TASK_MAPPINGS[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
+    const details = TASK_MAPPINGS[roleKey][taskType]
+    if (!details) return 0
+    switch(details.priority) {
+      case 'CRITICAL': return 4
+      case 'HIGH': return 3
+      case 'MEDIUM': return 2
+      case 'LOW': return 1
+      default: return 0
+    }
+  }
+
+  // Filter tasks
+  const activeTasks = tasks.filter(t => !t.completed)
+  const completedTasks = tasks.filter(t => t.completed)
+
+  const filterAndSortTasks = (taskList) => {
+    let list = [...taskList]
+    
+    // Sorting
+    list.sort((a, b) => {
+      // Always pin actively tracked task to the top
+      const aTracked = a.task_id === activeTaskId ? 1 : 0
+      const bTracked = b.task_id === activeTaskId ? 1 : 0
+      if (aTracked !== bTracked) return bTracked - aTracked
+
+      if (sortBy === 'NEAREST') {
+        const distA = taskDistances[a.task_id] ?? 9999
+        const distB = taskDistances[b.task_id] ?? 9999
+        return distA - distB
+      } else if (sortBy === 'PRIORITY') {
+        return getPriorityWeight(b.task_type) - getPriorityWeight(a.task_type)
+      } else if (sortBy === 'REWARD') {
+        return b.points - a.points
+      }
+      return 0
+    })
+
+    return list
+  }
+
+  const sortedActive = filterAndSortTasks(activeTasks)
+  const sortedCompleted = filterAndSortTasks(completedTasks)
 
   return (
     <div className="task-list-panel" id="task-list">
       <div className="task-list-header">
-        <span className="task-list-title">TASKS</span>
-        <span className="task-list-progress">{completed}/{tasks.length}</span>
+        <span className="task-list-title">
+          <Navigation size={13} style={{ color: '#8b5cf6' }} />
+          OBJECTIVES
+        </span>
+        <span className="task-list-progress">
+          {completedTasks.length}/{tasks.length}
+        </span>
       </div>
+
+      {/* Interactive sorting and filters bar */}
+      <div className="task-filters">
+        <select 
+          className="task-filter-select" 
+          value={sortBy} 
+          onChange={(e) => setSortBy(e.target.value)}
+        >
+          <option value="NEAREST">Nearest First</option>
+          <option value="PRIORITY">Highest Priority</option>
+          <option value="REWARD">Highest Reward</option>
+        </select>
+
+        <button 
+          className="task-sort-btn" 
+          onClick={() => {
+            // Find first incomplete task and track it
+            const firstIncomplete = activeTasks[0]
+            if (firstIncomplete) {
+              setActiveTask(firstIncomplete.task_id)
+            }
+          }}
+          disabled={activeTasks.length === 0}
+        >
+          Auto-Track
+        </button>
+      </div>
+
       <div className="task-items">
-        {tasks.map(task => (
-          <TaskItem key={task.task_id} task={task} />
-        ))}
+        {/* Active Tasks List */}
+        <AnimatePresence>
+          {sortedActive.map(task => (
+            <TaskItemCard
+              key={task.task_id}
+              task={task}
+              isExpanded={expandedId === task.task_id}
+              onToggleExpand={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+              activeTaskId={activeTaskId}
+              setActiveTask={setActiveTask}
+              distance={taskDistances[task.task_id]}
+              role={role}
+            />
+          ))}
+        </AnimatePresence>
+
+        {activeTasks.length === 0 && (
+          <div className="evidence-empty" style={{ padding: '2rem 0' }}>
+            🎉 All primary objectives secured!
+          </div>
+        )}
+
+        {/* Collapsible Completed Section */}
+        {completedTasks.length > 0 && (
+          <>
+            <div 
+              className="task-completed-toggle"
+              onClick={() => setShowCompletedSection(!showCompletedSection)}
+            >
+              <span className="task-completed-badge-icon">
+                <CheckCircle2 size={12} style={{ color: '#10b981' }} />
+                <span>Completed Tasks ({completedTasks.length})</span>
+              </span>
+              {showCompletedSection ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </div>
+
+            <AnimatePresence>
+              {showCompletedSection && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="task-items"
+                  style={{ gap: '0.6rem', marginTop: '0.4rem' }}
+                >
+                  {sortedCompleted.map(task => (
+                    <TaskItemCard
+                      key={task.task_id}
+                      task={task}
+                      isExpanded={expandedId === task.task_id}
+                      onToggleExpand={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                      activeTaskId={activeTaskId}
+                      setActiveTask={setActiveTask}
+                      distance={null}
+                      role={role}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
       </div>
     </div>
   )
 }
+

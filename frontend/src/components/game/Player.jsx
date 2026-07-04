@@ -25,8 +25,8 @@ const ROLE_OUTFIT = {
 }
 
 /* ── 3D Human Student Mesh ── */
-function StudentBody({ role, isWalking, isRunning, bodyRef }) {
-  const outfit = ROLE_OUTFIT[role] || ROLE_OUTFIT.default
+function StudentBody({ role, isWalking, isRunning, bodyRef, customOutfit }) {
+  const outfit = customOutfit || ROLE_OUTFIT[role] || ROLE_OUTFIT.default
   const legSwingRef = useRef(0)
 
   useFrame((_, delta) => {
@@ -248,33 +248,128 @@ function WalkingLeg({ basePos, pantsColor, shoeColor, swingRef, phase }) {
   )
 }
 
-/* ── Other Player Character (simpler, different color) ── */
-function OtherPlayerCharacter({ data }) {
-  const colors = ['#3b82f6', '#22c55e', '#ec4899', '#f97316', '#a855f7', '#06b6d4']
-  const color = colors[parseInt(data.player_id || '0') % colors.length]
+const getUniqueOutfit = (playerId) => {
+  const colors = ['#3b82f6', '#22c55e', '#ec4899', '#f97316', '#a855f7', '#06b6d4', '#14b8a6', '#ef4444']
+  const index = parseInt(playerId || '0') % colors.length
+  const shirtColor = colors[index]
+  const pantsColor = colors[(index + 2) % colors.length]
+  const hairColors = ['#1a0a00', '#2a1500', '#0a0a0a', '#1a0800', '#3b2512']
+  const hairColor = hairColors[index % hairColors.length]
+  const skinColors = ['#f5c5a0', '#e8b88a', '#f0d0b0', '#c8a070', '#e8c090']
+  const skinColor = skinColors[index % skinColors.length]
 
-  const pos = data.position
-    ? [data.position.x, data.position.y ?? 0.5, data.position.z]
-    : [0, 0.5, 0]
+  return {
+    shirt: shirtColor,
+    pants: pantsColor,
+    skin: skinColor,
+    hair: hairColor,
+  }
+}
+
+/* ── Other Player Character (Fully Articulated & Animated) ── */
+function OtherPlayerCharacter({ data }) {
+  const groupRef = useRef()
+  const bodyRef = useRef()
+  const prevPos = useRef(new THREE.Vector3())
+  const targetPos = useRef(new THREE.Vector3())
+  const targetRot = useRef(0)
+
+  const [isWalking, setIsWalking] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
+
+  // Outfits and colors based on player ID
+  const customOutfit = useMemo(() => getUniqueOutfit(data.player_id), [data.player_id])
+  const colors = ['#3b82f6', '#22c55e', '#ec4899', '#f97316', '#a855f7', '#06b6d4', '#14b8a6', '#ef4444']
+  const baseColor = colors[parseInt(data.player_id || '0') % colors.length]
+
+  // Update target coordinates from WebSocket data
+  useEffect(() => {
+    if (data.position) {
+      targetPos.current.set(data.position.x, data.position.y ?? 0, data.position.z)
+    }
+    if (data.rotation !== undefined) {
+      targetRot.current = data.rotation
+    }
+  }, [data.position, data.rotation])
+
+  // Initialize position on mount
+  useEffect(() => {
+    if (groupRef.current && data.position) {
+      groupRef.current.position.set(data.position.x, data.position.y ?? 0, data.position.z)
+      prevPos.current.copy(groupRef.current.position)
+    }
+  }, [])
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return
+
+    // Interpolate (lerp) position and rotation for buttery-smooth multiplayer movement
+    groupRef.current.position.lerp(targetPos.current, 0.15)
+    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetRot.current, 0.15)
+
+    // Calculate speed based on position delta
+    const currentPos = groupRef.current.position
+    const distMoved = currentPos.distanceTo(prevPos.current)
+    const speed = distMoved / (delta || 0.016)
+
+    // Determine animation states based on speed thresholds
+    const walking = speed > 0.1 && speed <= 6.5
+    const running = speed > 6.5
+
+    if (isWalking !== walking) setIsWalking(walking)
+    if (isRunning !== running) setIsRunning(running)
+
+    prevPos.current.copy(currentPos)
+  })
 
   return (
-    <group position={pos}>
-      {/* Simplified human silhouette */}
-      <mesh position={[0, 0.9, 0]} castShadow>
-        <capsuleGeometry args={[0.17, 0.7, 8, 12]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
+    <group ref={groupRef} scale={[1.18, 1.18, 1.18]}>
+      {/* Dynamic detailed Student Body */}
+      <StudentBody
+        role={data.role}
+        isWalking={isWalking}
+        isRunning={isRunning}
+        bodyRef={bodyRef}
+        customOutfit={customOutfit}
+      />
+
+      {/* Role indicator (only if known/revealed) or default name tag ring */}
+      <mesh position={[0, 2.3, 0]} renderOrder={9999}>
+        <sphereGeometry args={[0.08, 12, 12]} />
+        <meshBasicMaterial
+          color={
+            data.role === 'DETECTIVE'
+              ? '#06b6d4'
+              : data.role === 'MASTERMIND'
+              ? '#ef4444'
+              : data.role === 'INVESTIGATOR'
+              ? '#10b981'
+              : baseColor
+          }
+          depthTest={false}
+          transparent
+          opacity={0.85}
+        />
       </mesh>
-      <mesh position={[0, 1.72, 0]} castShadow>
-        <sphereGeometry args={[0.165, 10, 10]} />
-        <meshStandardMaterial color="#e8b888" roughness={0.6} />
+
+      {/* Ground shadow ring */}
+      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.32, 24]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.35} />
       </mesh>
-      {/* Name tag glow ring */}
-      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.28, 0.38, 24]} />
-        <meshBasicMaterial color={color} transparent opacity={0.4} side={THREE.DoubleSide} />
+
+      {/* Role-colored / player-colored ground glow ring */}
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.32, 0.44, 32]} />
+        <meshBasicMaterial
+          color={data.role === 'MASTERMIND' || data.role === 'CONSPIRATOR' ? '#ef4444' : baseColor}
+          transparent opacity={0.4}
+          side={THREE.DoubleSide}
+        />
       </mesh>
+
       {/* Point light glow */}
-      <pointLight position={[0, 0.5, 0]} intensity={2} distance={4} color={color} />
+      <pointLight position={[0, 2.2, 0]} intensity={3} distance={6} color={baseColor} castShadow />
     </group>
   )
 }

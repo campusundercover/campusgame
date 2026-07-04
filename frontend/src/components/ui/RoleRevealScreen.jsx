@@ -1,190 +1,396 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { Stars } from '@react-three/drei'
+import * as THREE from 'three'
 import useGameStore from '../../store/gameStore'
 
-const ROLE_CONFIG = {
+/* ─────────────────────────────────────────────
+   ROLE CONFIGS & MISSION QUOTES
+   ───────────────────────────────────────────── */
+const ROLE_CONFIGS = {
   DETECTIVE: {
-    color: '#3b82f6', glow: 'rgba(59,130,246,0.6)', icon: '🔍',
-    title: 'DETECTIVE', subtitle: 'Uncover the Truth',
-    description: 'You lead the investigation. Collect evidence, interview NPCs, and identify the criminal pair before time runs out.',
+    color: '#06b6d4',
+    secondaryColor: '#3b82f6',
+    icon: '🔍',
+    title: 'DETECTIVE',
+    tagline: 'DIGITAL FORENSICS & INVESTIGATION',
+    quote: '"Every clue tells a story. Find the truth before time runs out."',
+    description: 'You lead the digital forensics investigation. Track down security logs, piece together evidence, and pinpoint the conspirators.',
+    bgStyle: 'radial-gradient(circle at center, rgba(6,182,212,0.06) 0%, #030712 100%)',
     abilities: [
-      { name: 'CCTV Analysis', icon: '📹', desc: 'Review surveillance footage' },
-      { name: 'Digital Recovery', icon: '💻', desc: 'Recover deleted server logs' },
-      { name: 'Evidence Correlate', icon: '🔗', desc: 'Link evidence on board' },
-    ],
-    tip: 'Trust no one. The truth is hidden in plain sight.',
-    bg: 'linear-gradient(135deg, #0a1628 0%, #1e3a5f 100%)',
+      { name: 'CCTV Analysis', icon: '📹', desc: 'Replay security footage feeds' },
+      { name: 'Digital Recovery', icon: '💻', desc: 'Restore redacted logs' },
+      { name: 'Evidence Board', icon: '🔗', desc: 'Link conflicting testimonies' }
+    ]
   },
   INVESTIGATOR: {
-    color: '#22c55e', glow: 'rgba(34,197,94,0.6)', icon: '🧩',
-    title: 'INVESTIGATOR', subtitle: 'Aid the Investigation',
-    description: 'Support the Detective by completing tasks, collecting evidence, and talking to witnesses across campus.',
+    color: '#10b981',
+    secondaryColor: '#8b5cf6',
+    icon: '🧩',
+    title: 'INVESTIGATOR',
+    tagline: 'TACTICAL OBSERVATION & EXPLORATION',
+    quote: '"Observe carefully. Every movement could be a clue."',
+    description: 'You are the eyes and ears on the ground. Complete tasks, secure crime scenes, and file critical field reports.',
+    bgStyle: 'radial-gradient(circle at center, rgba(16,185,129,0.06) 0%, #022c22 100%)',
     abilities: [
-      { name: 'Witness Interview', icon: '🗣️', desc: 'Question campus NPCs' },
-      { name: 'Task Completion', icon: '✅', desc: 'Complete campus tasks' },
-      { name: 'Evidence Report', icon: '📝', desc: 'Submit findings to Detective' },
-    ],
-    tip: 'Complete your tasks. Report anything suspicious.',
-    bg: 'linear-gradient(135deg, #0a1a0f 0%, #14532d 100%)',
-  },
-  MASTERMIND: {
-    color: '#ef4444', glow: 'rgba(239,68,68,0.6)', icon: '🕵️',
-    title: 'MASTERMIND', subtitle: 'Stay Hidden',
-    description: 'You are the criminal mastermind. Plant false evidence, manipulate witnesses, and trigger chaos to avoid detection.',
-    abilities: [
-      { name: 'Plant Fake Evidence', icon: '🧪', desc: 'Place fabricated clues' },
-      { name: 'Frame a Player', icon: '🎭', desc: 'Shift blame to innocents' },
-      { name: 'Trigger Meeting', icon: '🔔', desc: 'Call emergency meeting' },
-      { name: 'Manipulate NPC', icon: '🧠', desc: 'Change witness testimony' },
-    ],
-    tip: 'Your partner is revealed below. Coordinate secretly.',
-    bg: 'linear-gradient(135deg, #1a0505 0%, #450a0a 100%)',
+      { name: 'Witness Interview', icon: '🗣️', desc: 'Collect local alibis' },
+      { name: 'Field Survey', icon: '✅', desc: 'Secure location nodes' },
+      { name: 'Evidence Report', icon: '📝', desc: 'File reports to HQ' }
+    ]
   },
   CONSPIRATOR: {
-    color: '#f97316', glow: 'rgba(249,115,22,0.6)', icon: '🔪',
-    title: 'CONSPIRATOR', subtitle: 'Cover Your Tracks',
-    description: 'You assist the Mastermind from the shadows. Destroy evidence, create alibis, and disable security.',
+    color: '#f97316',
+    secondaryColor: '#dc2626',
+    icon: '🔪',
+    title: 'CONSPIRATOR',
+    tagline: 'SABOTAGE & DECEPTIVE OPERATIONS',
+    quote: '"Leave no trace. Trust no one except your partner."',
+    description: 'You operate from the shadows. Destroy key files, create fake alibis, and disable surveillance hubs.',
+    bgStyle: 'radial-gradient(circle at center, rgba(249,115,22,0.06) 0%, #1c0a00 100%)',
     abilities: [
-      { name: 'Destroy Evidence', icon: '🔥', desc: 'Eliminate incriminating clues' },
-      { name: 'Secure Perimeter', icon: '🛡️', desc: 'Block Detective\'s access' },
-      { name: 'Create Alibi', icon: '📋', desc: 'Generate false records' },
-    ],
-    tip: 'Work in silence. Do not draw attention to yourself.',
-    bg: 'linear-gradient(135deg, #1a0a00 0%, #431407 100%)',
+      { name: 'Data Sabotage', icon: '🔥', desc: 'Purge collected evidence' },
+      { name: 'Lockdown Hub', icon: '🛡️', desc: 'Block node access points' },
+      { name: 'Fabricate Records', icon: '📋', desc: 'Fake testimony logs' }
+    ]
   },
+  MASTERMIND: {
+    color: '#ef4444',
+    secondaryColor: '#7f1d1d',
+    icon: '🧠',
+    title: 'MASTERMIND',
+    tagline: 'STRATEGIC DECEPTION & MANIPULATION',
+    quote: '"The greatest weapon is not force. It is manipulation."',
+    description: 'You coordinate the conspiracy. Alter evidence boards, manipulate testimonies, and plant false trails.',
+    bgStyle: 'radial-gradient(circle at center, rgba(239,68,68,0.06) 0%, #0f0202 100%)',
+    abilities: [
+      { name: 'Forge Testimony', icon: '🧪', desc: 'Alter witness dialog' },
+      { name: 'Frame Suspect', icon: '🎭', desc: 'Pin suspicion on clean players' },
+      { name: 'Trigger Alarm', icon: '🔔', desc: 'Call an emergency meeting' }
+    ]
+  }
 }
 
-export default function RoleRevealScreen({ onBegin }) {
-  const role = useGameStore((s) => s.role)
-  const partnerInfo = useGameStore((s) => s.partnerInfo)
-  const difficulty = useGameStore((s) => s.difficulty)
-  const [phase, setPhase] = useState('scanning') // scanning | flipping | revealed
-  const [flipped, setFlipped] = useState(false)
+/* ─────────────────────────────────────────────
+   WEB AUDIO SYNTH — Role Specific Ambience
+   ───────────────────────────────────────────── */
+function playRoleAudio(role) {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return
+    const ac = new AudioContextClass()
+    const now = ac.currentTime
 
-  const config = ROLE_CONFIG[role] || ROLE_CONFIG.INVESTIGATOR
+    if (role === 'DETECTIVE') {
+      // Terminal scan beep & low digital sweep
+      const osc = ac.createOscillator()
+      const filter = ac.createBiquadFilter()
+      const gain = ac.createGain()
 
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase('flipping'), 1800)
-    const t2 = setTimeout(() => { setFlipped(true); setPhase('revealed') }, 2400)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(440, now)
+      osc.frequency.exponentialRampToValueAtTime(1200, now + 0.4)
+
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(2000, now)
+
+      gain.gain.setValueAtTime(0.2, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2)
+
+      osc.connect(filter)
+      filter.connect(gain)
+      gain.connect(ac.destination)
+
+      osc.start()
+      osc.stop(now + 1.3)
+    } else if (role === 'INVESTIGATOR') {
+      // Wind hum + camera shutter click simulation
+      const gainNode = ac.createGain()
+      gainNode.gain.setValueAtTime(0.12, now)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.5)
+
+      const osc = ac.createOscillator()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(110, now)
+      osc.connect(gainNode)
+      gainNode.connect(ac.destination)
+      osc.start()
+      osc.stop(now + 1.6)
+
+      // Click
+      setTimeout(() => {
+        const clickOsc = ac.createOscillator()
+        const clickGain = ac.createGain()
+        clickOsc.type = 'sawtooth'
+        clickOsc.frequency.setValueAtTime(800, ac.currentTime)
+        clickOsc.frequency.exponentialRampToValueAtTime(150, ac.currentTime + 0.08)
+        clickGain.gain.setValueAtTime(0.1, ac.currentTime)
+        clickGain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.1)
+        clickOsc.connect(clickGain)
+        clickGain.connect(ac.destination)
+        clickOsc.start()
+        clickOsc.stop(ac.currentTime + 0.12)
+      }, 350)
+    } else if (role === 'CONSPIRATOR') {
+      // Double heartbeat sound
+      const playThump = (timeOffset) => {
+        const osc = ac.createOscillator()
+        const gain = ac.createGain()
+        osc.frequency.setValueAtTime(65, ac.currentTime + timeOffset)
+        osc.frequency.exponentialRampToValueAtTime(25, ac.currentTime + timeOffset + 0.25)
+        gain.gain.setValueAtTime(0.35, ac.currentTime + timeOffset)
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + timeOffset + 0.3)
+        osc.connect(gain)
+        gain.connect(ac.destination)
+        osc.start(ac.currentTime + timeOffset)
+        osc.stop(ac.currentTime + timeOffset + 0.35)
+      }
+      playThump(0)
+      playThump(0.3)
+    } else if (role === 'MASTERMIND') {
+      // Deep swell synth chord
+      const chords = [55, 65.4, 82.4] // Root, minor third, fifth (A minor swell)
+      chords.forEach(freq => {
+        const osc = ac.createOscillator()
+        const gain = ac.createGain()
+        osc.type = 'sawtooth'
+        osc.frequency.value = freq
+        gain.gain.setValueAtTime(0, now)
+        gain.gain.linearRampToValueAtTime(0.08, now + 0.6)
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5)
+
+        const lowpass = ac.createBiquadFilter()
+        lowpass.type = 'lowpass'
+        lowpass.frequency.value = 180
+
+        osc.connect(lowpass)
+        lowpass.connect(gain)
+        gain.connect(ac.destination)
+
+        osc.start()
+        osc.stop(now + 2.6)
+      })
+    }
+  } catch (e) {
+    console.warn('Audio Context play failed', e)
+  }
+}
+
+/* ─────────────────────────────────────────────
+   3D BACKGROUND PARTICLES SYSTEM
+   ───────────────────────────────────────────── */
+function AmbientParticles({ roleColor }) {
+  const pointsRef = useRef()
+  const pCount = 200
+
+  const positions = React.useMemo(() => {
+    const arr = new Float32Array(pCount * 3)
+    for (let i = 0; i < pCount; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 20
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 12
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 10
+    }
+    return arr
   }, [])
 
+  useFrame((state) => {
+    if (!pointsRef.current) return
+    const t = state.clock.getElapsedTime()
+    pointsRef.current.rotation.y = t * 0.03
+    pointsRef.current.rotation.x = Math.sin(t * 0.05) * 0.05
+  })
+
   return (
-    <div className="rr-overlay" id="role-reveal-screen" style={{ '--role-color': config.color, '--role-glow': config.glow, '--role-bg': config.bg }}>
-      {/* Animated background particles */}
-      <div className="rr-particles">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="rr-particle" style={{
-            left: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 3}s`,
-            animationDuration: `${3 + Math.random() * 4}s`,
-          }} />
-        ))}
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[positions, 3]}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        color={roleColor}
+        size={0.08}
+        sizeAttenuation
+        transparent
+        opacity={0.35}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  )
+}
+
+function RoleSculpture({ roleColor, role }) {
+  const meshRef = useRef()
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return
+    const t = clock.getElapsedTime()
+    meshRef.current.rotation.y = t * 0.4
+    meshRef.current.rotation.x = Math.sin(t * 0.3) * 0.2
+  })
+
+  // Provide a specialized sculpture representing the role
+  if (role === 'DETECTIVE') {
+    return (
+      <mesh ref={meshRef} position={[0, 0, 0]}>
+        <octahedronGeometry args={[2, 0]} />
+        <meshBasicMaterial color={roleColor} wireframe transparent opacity={0.3} />
+      </mesh>
+    )
+  } else if (role === 'INVESTIGATOR') {
+    return (
+      <mesh ref={meshRef} position={[0, 0, 0]}>
+        <icosahedronGeometry args={[2.1, 1]} />
+        <meshBasicMaterial color={roleColor} wireframe transparent opacity={0.25} />
+      </mesh>
+    )
+  } else if (role === 'CONSPIRATOR') {
+    return (
+      <mesh ref={meshRef} position={[0, 0, 0]}>
+        <dodecahedronGeometry args={[2, 0]} />
+        <meshBasicMaterial color={roleColor} wireframe transparent opacity={0.22} />
+      </mesh>
+    )
+  } else {
+    // Mastermind: nested dark cubes rotating oppositely
+    return (
+      <group ref={meshRef}>
+        <mesh>
+          <boxGeometry args={[2, 2, 2]} />
+          <meshBasicMaterial color={roleColor} wireframe transparent opacity={0.25} />
+        </mesh>
+        <mesh rotation={[0, Math.PI / 4, Math.PI / 4]}>
+          <boxGeometry args={[1.2, 1.2, 1.2]} />
+          <meshBasicMaterial color="#ffffff" wireframe transparent opacity={0.15} />
+        </mesh>
+      </group>
+    )
+  }
+}
+
+/* ─────────────────────────────────────────────
+   MAIN COMPONENT — RoleRevealScreen
+   ───────────────────────────────────────────── */
+export default function RoleRevealScreen({ onBegin }) {
+  const role = useGameStore((s) => s.role) || 'INVESTIGATOR'
+  const partnerInfo = useGameStore((s) => s.partnerInfo)
+  const config = ROLE_CONFIGS[role] || ROLE_CONFIGS.INVESTIGATOR
+
+  // Reveal timeline stages
+  const [animStage, setAnimStage] = useState(0) // 0: Init fade, 1: Symbol, 2: Title, 3: Specs, 4: Abilities, 5: Quote, 6: Button active
+  const [hoveredAbility, setHoveredAbility] = useState(null)
+
+  useEffect(() => {
+    // Play role audio on load
+    playRoleAudio(role)
+
+    // Stagger reveal animations sequentially (5-7 seconds total)
+    const timers = [
+      setTimeout(() => setAnimStage(1), 500),   // Fade-in icon
+      setTimeout(() => setAnimStage(2), 1500),  // Animate game role title
+      setTimeout(() => setAnimStage(3), 2500),  // Fade in role tagline/description
+      setTimeout(() => setAnimStage(4), 3300),  // Stagger abilities
+      setTimeout(() => setAnimStage(5), 4500),  // Quote & teammate reveal
+      setTimeout(() => setAnimStage(6), 5500)   // Enable Continue button
+    ]
+
+    return () => timers.forEach(clearTimeout)
+  }, [role])
+
+  return (
+    <div
+      className="cu-rr-container"
+      style={{
+        '--role-theme': config.color,
+        '--role-theme-sec': config.secondaryColor,
+        background: config.bgStyle
+      }}
+    >
+      {/* 3D Atmosphere Canvas */}
+      <div className="cu-rr-canvas">
+        <Canvas camera={{ position: [0, 0, 6], fov: 60 }}>
+          <ambientLight intensity={0.1} />
+          <Stars radius={60} depth={30} count={300} factor={1.5} saturation={0} fade speed={0.4} />
+          <AmbientParticles roleColor={config.color} />
+          {animStage >= 1 && <RoleSculpture roleColor={config.color} role={role} />}
+        </Canvas>
       </div>
 
-      {/* Scanning phase */}
-      {phase === 'scanning' && (
-        <div className="rr-scanning">
-          <div className="rr-scan-lines" />
-          <p className="rr-scan-text">SCANNING IDENTITY...</p>
-          <div className="rr-scan-bar" />
+      {/* Futuristic Scan overlay lines */}
+      <div className="cu-rr-scanlines" />
+
+      {/* Main content overlay flow */}
+      <div className="cu-rr-content-wrap">
+        
+        {/* Step 1: Big Symbol */}
+        <div className={`cu-rr-crest ${animStage >= 1 ? 'cu-rr-visible' : ''}`}>
+          <div className="cu-rr-ring" />
+          <span className="cu-rr-crest-icon">{config.icon}</span>
         </div>
-      )}
 
-      {/* Card */}
-      <div className={`rr-card-scene ${phase !== 'scanning' ? 'rr-card-scene--visible' : ''}`}>
-        <div className={`rr-card ${flipped ? 'rr-card--flipped' : ''}`}>
-          {/* Card Back */}
-          <div className="rr-card-face rr-card-back">
-            <div className="rr-card-back-pattern">
-              <span className="rr-card-back-logo">✝</span>
-              <p>CHRIST UNIVERSITY</p>
-              <p>MYSTERY GAME</p>
-            </div>
-          </div>
+        {/* Step 2: Role title */}
+        <div className={`cu-rr-title-block ${animStage >= 2 ? 'cu-rr-visible' : ''}`}>
+          <p className="cu-rr-pretitle">IDENTITY DECLASSIFIED</p>
+          <h1 className="cu-rr-title-text">{config.title}</h1>
+          <p className="cu-rr-tagline-text">{config.tagline}</p>
+        </div>
 
-          {/* Card Front */}
-          <div className="rr-card-face rr-card-front" style={{ background: config.bg }}>
-            {/* Top glow bar */}
-            <div className="rr-card-top-bar" />
+        {/* Step 3: Description */}
+        <div className={`cu-rr-desc-block ${animStage >= 3 ? 'cu-rr-visible' : ''}`}>
+          <p className="cu-rr-desc-text">{config.description}</p>
+        </div>
 
-            {/* Header */}
-            <div className="rr-card-header">
-              <div className="rr-card-icon-wrap" style={{ borderColor: config.color, boxShadow: `0 0 20px ${config.glow}` }}>
-                <span className="rr-icon">{config.icon}</span>
-              </div>
-              <div>
-                <p className="rr-card-your-role">YOUR ROLE</p>
-                <h2 className="rr-card-title" style={{ color: config.color, textShadow: `0 0 20px ${config.glow}` }}>
-                  {config.title}
-                </h2>
-                <p className="rr-card-subtitle">{config.subtitle}</p>
-              </div>
-            </div>
-
-            {/* Description */}
-            <p className="rr-card-desc">{config.description}</p>
-
-            {/* Abilities */}
-            <div className="rr-abilities">
-              <p className="rr-section-label">ABILITIES</p>
-              <div className="rr-ability-grid">
-                {config.abilities.map(ab => (
-                  <div key={ab.name} className="rr-ability-chip" style={{ borderColor: `${config.color}44` }}>
-                    <span className="rr-ability-chip-icon">{ab.icon}</span>
-                    <div>
-                      <p className="rr-ability-name">{ab.name}</p>
-                      <p className="rr-ability-desc">{ab.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Partner (villain only) */}
-            {partnerInfo?.partner_id && (
-              <div className="rr-partner">
-                <p className="rr-section-label">YOUR PARTNER</p>
-                <div className="rr-partner-card">
-                  <div className="rr-partner-avatar">
-                    <span>🤝</span>
-                  </div>
-                  <div>
-                    <p className="rr-partner-name">{partnerInfo.partner_name || 'Unknown'}</p>
-                    <p className="rr-partner-role">{partnerInfo.partner_role}</p>
-                  </div>
-                  <p className="rr-partner-secret">SECRET</p>
+        {/* Step 4: Ability lists staggered */}
+        <div className={`cu-rr-abilities-block ${animStage >= 4 ? 'cu-rr-visible' : ''}`}>
+          <p className="cu-rr-block-label">TACTICAL ABILITIES</p>
+          <div className="cu-rr-abilities-list">
+            {config.abilities.map((ab, idx) => (
+              <div
+                key={ab.name}
+                className="cu-rr-ability-card"
+                style={{
+                  animationDelay: `${idx * 250}ms`
+                }}
+                onMouseEnter={() => setHoveredAbility(ab)}
+                onMouseLeave={() => setHoveredAbility(null)}
+              >
+                <div className="cu-rr-ability-card-header">
+                  <span className="cu-rr-ab-icon">{ab.icon}</span>
+                  <span className="cu-rr-ab-name">{ab.name}</span>
                 </div>
-                <p className="rr-partner-warning">⚠️ Do not expose your partner in chat</p>
+                <div className="cu-rr-ability-card-desc">{ab.desc}</div>
               </div>
-            )}
-
-            {/* Tip */}
-            <div className="rr-tip">
-              <span>💡</span>
-              <p>{config.tip}</p>
-            </div>
-
-            {/* Meta */}
-            <div className="rr-meta">
-              <span className="rr-badge">{(difficulty || 'medium').toUpperCase()}</span>
-              <span className="rr-badge">CHRIST UNIVERSITY</span>
-            </div>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Begin button */}
-      {phase === 'revealed' && (
-        <button
-          id="begin-investigation-btn"
-          className="rr-begin-btn"
-          style={{ '--role-color': config.color }}
-          onClick={onBegin}
-        >
-          <span>BEGIN INVESTIGATION</span>
-          <span className="rr-begin-arrow">→</span>
-        </button>
-      )}
+        {/* Step 5: Mission quote & optional partner details */}
+        <div className={`cu-rr-meta-block ${animStage >= 5 ? 'cu-rr-visible' : ''}`}>
+          <blockquote className="cu-rr-quote">{config.quote}</blockquote>
+
+          {partnerInfo?.partner_id && (
+            <div className="cu-rr-partner-reveal">
+              <p className="cu-rr-partner-label">CONFIRMED TEAMMATE</p>
+              <div className="cu-rr-partner-card">
+                <span className="cu-rr-partner-icon">🤝</span>
+                <div className="cu-rr-partner-info">
+                  <span className="cu-rr-partner-name">{partnerInfo.partner_name || 'Agent'}</span>
+                  <span className="cu-rr-partner-role">{partnerInfo.partner_role}</span>
+                </div>
+                <span className="cu-rr-partner-warning">KEEP CLASSIFIED</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Step 6: Begin action */}
+        <div className={`cu-rr-actions ${animStage >= 6 ? 'cu-rr-visible' : ''}`}>
+          <button className="cu-rr-btn" onClick={onBegin}>
+            <span className="cu-rr-btn-glow" />
+            <span className="cu-rr-btn-inner">BEGIN OPERATION</span>
+          </button>
+        </div>
+
+      </div>
     </div>
   )
 }

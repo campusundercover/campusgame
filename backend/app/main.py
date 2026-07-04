@@ -1,4 +1,5 @@
 import time as _time
+import asyncio
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 # pyrefly: ignore [missing-import]
@@ -41,7 +42,15 @@ app = FastAPI(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # CORS
-if settings.BACKEND_CORS_ORIGINS:
+if settings.ENVIRONMENT == "development":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex="https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+elif settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
@@ -77,6 +86,106 @@ class GameSessionState:
 
 # room_code -> GameSessionState
 active_game_states: Dict[str, GameSessionState] = {}
+active_game_loops: Dict[str, asyncio.Task] = {}
+
+import logging
+logger = logging.getLogger(__name__)
+
+async def run_authoritative_game_loop(room_code: str):
+    logger.info(f"[Game Loop] Starting authoritative loop for room {room_code}")
+    try:
+        while True:
+            gs = active_game_states.get(room_code)
+            room = lobby_manager.get_room(room_code)
+            if not gs or not room or room.status != "playing" or not gs.is_active:
+                logger.info(f"[Game Loop] Terminating for room {room_code}. Status: {room.status if room else 'None'}")
+                break
+
+            # 1. Authoritative Elapsed time check
+            elapsed = int(_time.time() - gs.started_at)
+            timer_limit = gs.modifiers.get('timer_seconds', 1200)
+            time_remaining = max(0, timer_limit - elapsed)
+
+            # Broadcast timer update
+            await broadcast_to_room(room_code, {
+                "type": "MATCH_TIMER_UPDATE",
+                "payload": {
+                    "time_remaining": time_remaining,
+                    "elapsed": elapsed
+                }
+            })
+
+            # 2. Check active meeting
+            mtg = meeting_manager.get_active_meeting(room_code)
+            if mtg:
+                mtg_elapsed = int(_time.time() - mtg.started_at)
+                mtg_remaining = max(0, MEETING_DURATION - mtg_elapsed)
+                
+                # Broadcast meeting timer update
+                await broadcast_to_room(room_code, {
+                    "type": "MEETING_TIMER_UPDATE",
+                    "payload": {
+                        "time_remaining": mtg_remaining
+                    }
+                })
+
+                if mtg_remaining <= 0 and mtg.is_active:
+                    # Auto end meeting when expired
+                    meeting_manager.end_meeting(room_code)
+                    await broadcast_to_room(room_code, {
+                        "type": "MEETING_ENDED",
+                        "payload": {"resumed": True}
+                    })
+
+            # 3. Check midpoint meeting (runs at 10 minutes / 600s elapsed)
+            if meeting_manager.check_midpoint(room_code, elapsed):
+                new_mtg = meeting_manager.start_meeting(room_code, "SYSTEM")
+                if new_mtg:
+                    await broadcast_to_room(room_code, {
+                        "type": "MEETING_STARTED",
+                        "payload": {**new_mtg.to_dict(), "triggered_by": "MIDPOINT"}
+                    })
+
+            # 4. Tick NPCs
+            npc_manager.tick_npc_movements(room_code, dt=1.0)
+            await broadcast_to_room(room_code, {
+                "type": "NPC_POSITIONS",
+                "payload": {
+                    "npcs": npc_manager.get_room_npcs(room_code)
+                }
+            })
+
+            # 5. Update player area durations (for Research Center presence check)
+            if hasattr(gs, 'player_positions'):
+                for p_pid, pstate in gs.player_positions.items():
+                    c_area = pstate.get('area', 'Unknown')
+                    dur_dict = pstate.setdefault('durations', {})
+                    dur_dict[c_area] = dur_dict.get(c_area, 0) + 1
+
+            # 6. Check observations every 10 seconds
+            if hasattr(gs, 'player_positions'):
+                npc_manager.obs_tick_counters[room_code] = npc_manager.obs_tick_counters.get(room_code, 0) + 1
+                if npc_manager.obs_tick_counters[room_code] >= 10:
+                    npc_manager.obs_tick_counters[room_code] = 0
+                    npc_manager.run_observation_check(room_code, gs.player_positions, elapsed)
+
+            # 7. Check game over due to time expiration
+            if elapsed >= timer_limit:
+                gs.is_active = False
+                await broadcast_to_room(room_code, {
+                    "type": "ACCUSATION_PHASE",
+                    "payload": {"reason": "TIME_EXPIRED", "elapsed": elapsed}
+                })
+                break
+
+            await asyncio.sleep(1.0)
+    except asyncio.CancelledError:
+        logger.info(f"[Game Loop] Authoritative loop for room {room_code} cancelled")
+    except Exception as e:
+        logger.error(f"[Game Loop] Error in room {room_code}: {e}", exc_info=True)
+    finally:
+        if room_code in active_game_loops:
+            del active_game_loops[room_code]
 
 # Reconnection tracking: room_code -> {pid_str: disconnect_timestamp}
 disconnected_players: Dict[str, Dict[str, float]] = {}
@@ -278,6 +387,9 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
                             "role": role2,
                         }
                     })
+                
+                # Start authoritative background game loop
+                active_game_loops[room_code] = asyncio.create_task(run_authoritative_game_loop(room_code))
 
     except WebSocketDisconnect:
         player.websocket = None
@@ -379,6 +491,17 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             e.to_dict() for e in evidence_manager.get_room_evidence(room_code)
             if not e.is_destroyed
         ]
+        # Calculate synchronized authoritative timer state
+        timer_limit = gs.modifiers.get('timer_seconds', 1200)
+        elapsed = int(_time.time() - gs.started_at)
+        time_remaining = max(0, timer_limit - elapsed)
+        mtg = meeting_manager.get_active_meeting(room_code)
+        meeting_active = mtg is not None
+        meeting_time_remaining = 0
+        if mtg:
+            mtg_elapsed = int(_time.time() - mtg.started_at)
+            meeting_time_remaining = max(0, MEETING_DURATION - mtg_elapsed)
+
         await websocket.send_json({
             "type": "GAME_STATE",
             "payload": {
@@ -386,6 +509,10 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                 "abilities": player_abilities,
                 "evidence": all_evidence_public,
                 "role": role,
+                "time_remaining": time_remaining,
+                "game_phase": "meeting" if meeting_active else "exploration",
+                "meeting_active": meeting_active,
+                "meeting_time_remaining": meeting_time_remaining
             }
         })
 
@@ -705,48 +832,8 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
 
             # ── Midpoint meeting check ──
             elif action == "TIMER_TICK":
-                elapsed = gs.elapsed_seconds
-
-                # Update player area durations (for Research Center presence check)
-                if gs and hasattr(gs, 'player_positions'):
-                    for p_pid, pstate in gs.player_positions.items():
-                        c_area = pstate.get('area', 'Unknown')
-                        dur_dict = pstate.setdefault('durations', {})
-                        dur_dict[c_area] = dur_dict.get(c_area, 0) + 1
-
-                # Tick NPCs
-                npc_manager.tick_npc_movements(room_code, dt=1.0)
-
-                # Broadcast updated NPC positions
-                await broadcast_to_room(room_code, {
-                    "type": "NPC_POSITIONS",
-                    "payload": {
-                        "npcs": npc_manager.get_room_npcs(room_code)
-                    }
-                })
-
-                # Check observations every 10 seconds
-                if gs and hasattr(gs, 'player_positions'):
-                    npc_manager.obs_tick_counters[room_code] = npc_manager.obs_tick_counters.get(room_code, 0) + 1
-                    if npc_manager.obs_tick_counters[room_code] >= 10:
-                        npc_manager.obs_tick_counters[room_code] = 0
-                        npc_manager.run_observation_check(room_code, gs.player_positions, elapsed)
-
-                if meeting_manager.check_midpoint(room_code, elapsed):
-                    mtg = meeting_manager.start_meeting(room_code, "SYSTEM")
-                    if mtg:
-                        await broadcast_to_room(room_code, {
-                            "type": "MEETING_STARTED",
-                            "payload": {**mtg.to_dict(), "triggered_by": "MIDPOINT"}
-                        })
-
-                timer_limit = gs.modifiers.get('timer_seconds', 1200)
-                if gs.is_active and elapsed >= timer_limit:
-                    gs.is_active = False
-                    await broadcast_to_room(room_code, {
-                        "type": "ACCUSATION_PHASE",
-                        "payload": {"reason": "TIME_EXPIRED", "elapsed": elapsed}
-                    })
+                # Ticks are now server-authoritative. Clients sending heartbeats is a no-op.
+                pass
 
             # ── Final Accusation ──
             elif action == "SUBMIT_ACCUSATION":

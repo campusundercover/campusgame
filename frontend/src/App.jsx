@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import GameScene from './components/game/GameScene'
 import RoleRevealScreen from './components/ui/RoleRevealScreen'
-import HomeScreen from './components/ui/HomeScreen'
+import HomeScreen, { getBackendHost, getWsProtocol } from './components/ui/HomeScreen'
 import useGameStore from './store/gameStore'
 
 /* ──────────────────── Loading Screen ──────────────────── */
@@ -75,7 +75,7 @@ function LoadingScreen({ onFinish }) {
         </div>
         <p className="loading-percent">{Math.floor(progress)}%</p>
 
-        <div className="loading-footer">MCA Final Year Project • Christ University, Bengaluru • v2.0</div>
+        <div className="loading-footer">Christ University, Bengaluru · Campus Undercover v2.0</div>
       </div>
     </div>
   )
@@ -112,9 +112,9 @@ function useGameWebSocket(roomCode, playerId) {
 
   useEffect(() => {
     if (!roomCode || !playerId) return
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = window.location.hostname
-    const wsUrl = `${protocol}://${host}:8000/ws/game/${roomCode}/${playerId}?token=${encodeURIComponent(token || '')}`
+    const protocol = getWsProtocol()
+    const host = getBackendHost()
+    const wsUrl = `${protocol}://${host}/ws/game/${roomCode}/${playerId}?token=${encodeURIComponent(token || '')}`
     let ws
     try { ws = new WebSocket(wsUrl) } catch (e) { console.warn('[WS] Could not connect:', e); return }
     setWs(ws)
@@ -130,16 +130,51 @@ function useGameWebSocket(roomCode, playerId) {
             setGamePhase('role_reveal')
             break
           case 'GAME_STARTED': setNpcs(payload.npcs || []); break
-          case 'GAME_STATE': setTasks(payload.tasks || []); setAbilities(payload.abilities || []); setWorldEvidence(payload.evidence || []); break
-          case 'EVIDENCE_COLLECTED': removeWorldEvidence(payload.evidence?.evidence_id); break
-          case 'EVIDENCE_APPEARED': if (payload.evidence) addWorldEvidence(payload.evidence); break
-          case 'EVIDENCE_DESTROYED': removeWorldEvidence(payload.evidence_id); break
-          case 'EVIDENCE_BOARD_UPDATE': setEvidenceBoard(payload.board || []); break
+          case 'GAME_STATE':
+            setTasks(payload.tasks || [])
+            setAbilities(payload.abilities || [])
+            setWorldEvidence(payload.evidence || [])
+            if (payload.role) setRole(payload.role)
+            if (typeof payload.time_remaining === 'number') setTimerSeconds(payload.time_remaining)
+            if (payload.game_phase) setGamePhase(payload.game_phase)
+            if (typeof payload.meeting_active === 'boolean') setMeetingActive(payload.meeting_active)
+            if (typeof payload.meeting_time_remaining === 'number') setMeetingTimeRemaining(payload.meeting_time_remaining)
+            break
+          case 'MATCH_TIMER_UPDATE':
+            if (typeof payload.time_remaining === 'number') setTimerSeconds(payload.time_remaining)
+            break
+          case 'MEETING_TIMER_UPDATE':
+            if (typeof payload.time_remaining === 'number') setMeetingTimeRemaining(payload.time_remaining)
+            break
+          case 'EVIDENCE_COLLECTED':
+            if (payload.evidence) {
+              removeWorldEvidence(payload.evidence.evidence_id)
+              if (String(payload.collector_id) === String(playerId)) {
+                incrementEvidenceCollected()
+              }
+            }
+            break
+          case 'EVIDENCE_APPEARED':
+            if (payload.evidence) addWorldEvidence(payload.evidence)
+            break
+          case 'EVIDENCE_DESTROYED':
+            removeWorldEvidence(payload.evidence_id)
+            break
+          case 'EVIDENCE_BOARD_UPDATE':
+            setEvidenceBoard(payload.board || [])
+            break
           case 'TASK_UPDATED': updateTask(payload); break
           case 'NPC_STATEMENT': showNpcDialog({ npc_name: payload.npc_name, statement: payload.statement }); break
           case 'CHAT_MESSAGE': addChatMessage(payload); break
-          case 'MEETING_STARTED': setMeetingActive(true); setMeetingTimeRemaining(payload.time_remaining || 90); setGamePhase('meeting'); break
-          case 'MEETING_ENDED': setMeetingActive(false); setGamePhase('exploration'); break
+          case 'MEETING_STARTED':
+            setMeetingActive(true)
+            setMeetingTimeRemaining(payload.time_remaining || 90)
+            setGamePhase('meeting')
+            break
+          case 'MEETING_ENDED':
+            setMeetingActive(false)
+            setGamePhase('exploration')
+            break
           case 'ABILITY_RESULT': if (payload.ability_id) updateAbility(payload); break
           case 'CCTV_REPORT': setCctvReport(payload); break
           case 'CORRELATION_RESULT': addCorrelation(payload.evidence_id_a, payload.evidence_id_b, payload); break
@@ -149,16 +184,6 @@ function useGameWebSocket(roomCode, playerId) {
           case 'PLAYER_MOVED': if (String(payload.player_id) !== String(playerId)) updateOtherPlayer(payload.player_id, { position: payload.position, rotation: payload.rotation }); break
           case 'PLAYER_DISCONNECTED': removeOtherPlayer(payload.player_id); break
           case 'GAME_OVER': setGameResult(payload); break
-          case 'CHAT_MESSAGE': addChatMessage(payload); break
-          case 'EVIDENCE_COLLECTED':
-            removeWorldEvidence(payload.evidence.evidence_id)
-            if (String(payload.collector_id) === String(playerId)) {
-              incrementEvidenceCollected()
-            }
-            break
-          case 'EVIDENCE_BOARD_UPDATE': setEvidenceBoard(payload.board); break
-          case 'EVIDENCE_APPEARED': addWorldEvidence(payload.evidence); break
-          case 'EVIDENCE_DESTROYED': removeWorldEvidence(payload.evidence_id); break
           default: break
         }
       } catch (e) { console.error('[WS] Parse error:', e) }

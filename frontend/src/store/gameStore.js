@@ -153,7 +153,9 @@ const useGameStore = create((set, get) => ({
 
   // Meeting actions
   setMeetingActive: (active) => set({ meetingActive: active }),
-  setMeetingTimeRemaining: (t) => set({ meetingTimeRemaining: t }),
+  setMeetingTimeRemaining: (t) => set((state) => ({
+    meetingTimeRemaining: typeof t === 'function' ? t(state.meetingTimeRemaining) : t
+  })),
 
   // CCTV report
   setCctvReport: (report) => set({ cctvReport: report }),

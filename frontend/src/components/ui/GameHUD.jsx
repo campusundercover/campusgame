@@ -45,6 +45,8 @@ function ChristUniversityMinimap() {
   const campusAreas = useGameStore((s) => s.campusAreas)
   const otherPlayers = useGameStore((s) => s.otherPlayers)
   const cameraYaw = useGameStore((s) => s.cameraYaw)
+  const activeTaskId = useGameStore((s) => s.activeTaskId)
+  const tasks = useGameStore((s) => s.tasks)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -270,12 +272,61 @@ function ChristUniversityMinimap() {
     ctx.textAlign = 'center'
     ctx.fillText('N', W - 10, 14)
 
+    // Draw Waypoint Tracker for active task
+    const activeTask = tasks.find(t => t.task_id === activeTaskId && !t.completed)
+    if (activeTask) {
+      const AREA_WORLD_POSITIONS = {
+        'Research Center':  [28, -20],
+        'Computer Lab':     [28,   0],
+        'Security Office':  [-30,  4],
+        'MCA Department':   [ 8,  14],
+        'Main Block':       [-10, -8],
+        'Auditorium':       [-28,-28],
+        'Library':          [-24, 22],
+        'Cafeteria':        [ 32, 16],
+      }
+      const targetCoords = AREA_WORLD_POSITIONS[activeTask.location]
+      if (targetCoords) {
+        const [tx, ty] = worldToMap(targetCoords[0], targetCoords[1])
+
+        // Draw dynamic pulsing beacon ring
+        const pulse = 6 + Math.sin(Date.now() * 0.006) * 3
+        ctx.beginPath()
+        ctx.arc(tx, ty, pulse, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.25)' // violet pulsing glow
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        // Draw solid waypoint pin core
+        ctx.beginPath()
+        ctx.arc(tx, ty, 3.5, 0, Math.PI * 2)
+        ctx.fillStyle = '#8b5cf6' // solid violet
+        ctx.fill()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        // Draw dashed path leading from player to waypoint
+        ctx.save()
+        ctx.beginPath()
+        ctx.setLineDash([4, 4])
+        ctx.moveTo(sx, sy)
+        ctx.lineTo(tx, ty)
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)'
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+
     // Modern glass border outline
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
     ctx.lineWidth = 1.5
     ctx.strokeRect(0, 0, W, H)
 
-  }, [playerPosition, playerRotation, otherPlayers, campusAreas, cameraYaw])
+  }, [playerPosition, playerRotation, otherPlayers, campusAreas, cameraYaw, activeTaskId, tasks])
 
   return (
     <div className="minimap-wrapper">
@@ -327,16 +378,12 @@ function Timer() {
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      // 1. Tick timer locally
-      useGameStore.getState().tickTimer()
-
-      // 2. Read latest values from store dynamically inside stable interval
+      // Read latest values from store dynamically inside stable interval
       const state = useGameStore.getState()
       const currentWs = state.ws
       const currentPos = state.playerPosition
       const area = state.currentArea
 
-      // Send server heartbeat — drives NPC movement, midpoint checks, area tracking
       if (currentWs && currentWs.readyState === WebSocket.OPEN) {
         currentWs.send(JSON.stringify({ action: 'TIMER_TICK' }))
 

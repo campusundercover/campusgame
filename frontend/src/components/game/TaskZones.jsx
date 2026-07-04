@@ -1,7 +1,52 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { Html } from '@react-three/drei'
 import useGameStore from '../../store/gameStore'
+
+/* Dynamic role-aware text mapping */
+const TASK_NAMES = {
+  INVESTIGATOR: {
+    REPAIR_NETWORK: 'Repair Network Terminal',
+    ARCHIVE_FILES: 'Archive Research Files',
+    SUBMIT_ATTENDANCE: 'Submit Attendance Logs',
+    CHECK_CCTV: 'Check CCTV Feeds',
+    RETRIEVE_PRINT: 'Retrieve Print Job',
+    RESTOCK_LAB: 'Restock Lab Supplies',
+    SETUP_AUDITORIUM: 'Set Up Auditorium',
+    PLACE_LUNCH: 'Place Lunch Order',
+  },
+  DETECTIVE: {
+    REPAIR_NETWORK: 'Repair Network Terminal',
+    ARCHIVE_FILES: 'Archive Research Files',
+    SUBMIT_ATTENDANCE: 'Submit Attendance Logs',
+    CHECK_CCTV: 'Check CCTV Feeds',
+    RETRIEVE_PRINT: 'Retrieve Print Job',
+    RESTOCK_LAB: 'Restock Lab Supplies',
+    SETUP_AUDITORIUM: 'Set Up Auditorium',
+    PLACE_LUNCH: 'Place Lunch Order',
+  },
+  CONSPIRATOR: {
+    REPAIR_NETWORK: 'Install Keylogger on Terminal',
+    ARCHIVE_FILES: 'Corrupt Research Database',
+    SUBMIT_ATTENDANCE: 'Falsify Attendance Records',
+    CHECK_CCTV: 'Disable Security Cameras',
+    RETRIEVE_PRINT: 'Intercept Keycard Printout',
+    RESTOCK_LAB: 'Contaminate Chemical Reagents',
+    SETUP_AUDITORIUM: 'Rig Stage Lights for Failure',
+    PLACE_LUNCH: 'Poison Staff Cafeteria Food',
+  },
+  MASTERMIND: {
+    REPAIR_NETWORK: 'Install Keylogger on Terminal',
+    ARCHIVE_FILES: 'Corrupt Research Database',
+    SUBMIT_ATTENDANCE: 'Falsify Attendance Records',
+    CHECK_CCTV: 'Disable Security Cameras',
+    RETRIEVE_PRINT: 'Intercept Keycard Printout',
+    RESTOCK_LAB: 'Contaminate Chemical Reagents',
+    SETUP_AUDITORIUM: 'Rig Stage Lights for Failure',
+    PLACE_LUNCH: 'Poison Staff Cafeteria Food',
+  }
+}
 
 /* Area → world [x, z] (matches CampusMap building positions) */
 const AREA_WORLD_POSITIONS = {
@@ -80,6 +125,8 @@ function SingleTaskZone({ task }) {
   const playerPosition = useGameStore((s) => s.playerPosition)
   const ws             = useGameStore((s) => s.ws)
   const updateTask     = useGameStore((s) => s.updateTask)
+  const activeTaskId   = useGameStore((s) => s.activeTaskId)
+  const role           = useGameStore((s) => s.role)
 
   const [ax, az] = AREA_WORLD_POSITIONS[task.location] || [0, 0]
   const zonePos  = [ax, 0.04, az]
@@ -135,6 +182,37 @@ function SingleTaskZone({ task }) {
     <group position={zonePos}>
       {/* ── Completion sparkle ── */}
       {showSparkle && <CompletionSparkle position={[0, 0.1, 0]} />}
+
+      {/* ── AAA Dynamic Waypoint Light Beacon ── */}
+      {activeTaskId === task.task_id && !task.completed && (
+        <mesh position={[0, 15, 0]}>
+          <cylinderGeometry args={[0.15, 0.25, 30, 16, 1, true]} />
+          <meshBasicMaterial
+            color="#8b5cf6"
+            transparent
+            opacity={0.22 + Math.sin(Date.now() * 0.005) * 0.08}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* ── 3D Waypoint UI Badge ── */}
+      {activeTaskId === task.task_id && !task.completed && (
+        <Html position={[0, 4.0, 0]} center distanceFactor={14}>
+          <div className="game-waypoint-marker">
+            <div className="waypoint-label">
+              {(() => {
+                const roleKey = (role && TASK_NAMES[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
+                return TASK_NAMES[roleKey][task.task_type] || task.name
+              })()}
+            </div>
+            <div className="waypoint-distance">{Math.round(dist)}m</div>
+            <div className="waypoint-arrow">▼</div>
+          </div>
+        </Html>
+      )}
 
       {/* ── Outer rotating ring ── */}
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
