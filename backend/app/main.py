@@ -286,6 +286,11 @@ async def websocket_lobby_endpoint(websocket: WebSocket, room_code: str, player_
             elif action == "START_GAME":
                 if room.host_id != p_id:
                     continue
+                # Verify all non-host players are ready
+                non_host_players = [p for p in room.players.values() if p.player_id != room.host_id]
+                if not all(p.is_ready for p in non_host_players):
+                    await websocket.send_json({"type": "ERROR", "payload": {"message": "Waiting for all players to be ready."}})
+                    continue
                 players = list(room.players.keys())
                 # If less than 4 players, add bot/dummy players to fulfill role requirements
                 if len(players) < 4:

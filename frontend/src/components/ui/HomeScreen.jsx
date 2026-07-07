@@ -1281,6 +1281,7 @@ const PCOLORS = ['#3b82f6','#22c55e','#ec4899','#a855f7','#eab308','#f97316','#0
 
 function WaitingRoom({ auth, room: init, onGameStarted, onClose }) {
   const [room, setRoom] = useState(init)
+  const [copied, setCopied] = useState(false)
   const wsRef = useRef(null)
   const setRoomCode = useGameStore(s => s.setRoomCode)
 
@@ -1311,6 +1312,12 @@ function WaitingRoom({ auth, room: init, onGameStarted, onClose }) {
     else onGameStarted(room.room_code, auth?.userId, auth?.username)
   }
 
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(room.room_code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="cu-modal-overlay">
       <div className="cu-modal">
@@ -1319,9 +1326,9 @@ function WaitingRoom({ auth, room: init, onGameStarted, onClose }) {
           <p className="cu-label-tag">TACTICAL DECK</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h3 className="cu-modal-title">TERMINAL: <span className="cu-text-cyan">{room.room_code}</span></h3>
-            <button onClick={() => navigator.clipboard?.writeText(room.room_code)}
-              style={{ padding: '4px 10px', border: '1px solid rgba(6,182,212,0.4)', borderRadius: 4, background: 'rgba(6,182,212,0.1)', color: '#22d3ee', fontSize: 10, cursor: 'pointer', fontFamily: 'Orbitron, sans-serif' }}>
-              COPY
+            <button onClick={handleCopy}
+              style={{ padding: '4px 10px', border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(6,182,212,0.4)', borderRadius: 4, background: copied ? 'rgba(34,197,94,0.1)' : 'rgba(6,182,212,0.1)', color: copied ? '#4ade80' : '#22d3ee', fontSize: 10, cursor: 'pointer', fontFamily: 'Orbitron, sans-serif', transition: 'all 0.2s ease-in-out' }}>
+              {copied ? 'COPIED ✓' : 'COPY'}
             </button>
           </div>
           <p className="cu-modal-agent">{room.difficulty?.toUpperCase()} · {players.length}/{room.max_players} agents online</p>
@@ -1348,21 +1355,46 @@ function WaitingRoom({ auth, room: init, onGameStarted, onClose }) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-          <button
-            onClick={toggleReady}
-            style={{ flex: 1, padding: 12, border: `1.5px solid ${myPlayer?.is_ready ? '#22c55e' : 'rgba(6,182,212,0.5)'}`, borderRadius: 6, background: myPlayer?.is_ready ? 'rgba(34,197,94,0.1)' : 'rgba(6,182,212,0.05)', color: myPlayer?.is_ready ? '#86efac' : '#22d3ee', fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: 12, cursor: 'pointer', letterSpacing: 1 }}
-            data-hover
-          >
-            {myPlayer?.is_ready ? '✓ READY' : '○ SIGNAL READY'}
-          </button>
-          {isHost && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+          {isHost ? (
+            <>
+              <button
+                onClick={startGame}
+                disabled={!players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  border: 'none',
+                  borderRadius: 6,
+                  background: players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready)
+                    ? 'linear-gradient(135deg, #7c3aed, #4f46e5)'
+                    : 'rgba(255,255,255,0.05)',
+                  color: players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready) ? '#fff' : 'rgba(255,255,255,0.3)',
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready) ? 'pointer' : 'not-allowed',
+                  letterSpacing: 1,
+                  boxShadow: players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready) ? '0 4px 15px rgba(124,58,237,0.3)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                data-hover={players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready) ? "true" : "false"}
+              >
+                ▶ INITIATE CASE
+              </button>
+              {!players.filter(p => String(p.player_id || p.id) !== String(room.host_id)).every(p => p.is_ready) && (
+                <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 11, fontFamily: 'monospace', letterSpacing: 0.5 }}>
+                  ⚠️ Waiting for all players to be ready.
+                </div>
+              )}
+            </>
+          ) : (
             <button
-              onClick={startGame}
-              style={{ flex: 1, padding: 12, border: 'none', borderRadius: 6, background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', color: '#fff', fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: 12, cursor: 'pointer', letterSpacing: 1, boxShadow: '0 4px 15px rgba(124,58,237,0.3)' }}
+              onClick={toggleReady}
+              style={{ width: '100%', padding: 12, border: `1.5px solid ${myPlayer?.is_ready ? '#22c55e' : 'rgba(6,182,212,0.5)'}`, borderRadius: 6, background: myPlayer?.is_ready ? 'rgba(34,197,94,0.1)' : 'rgba(6,182,212,0.05)', color: myPlayer?.is_ready ? '#86efac' : '#22d3ee', fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: 12, cursor: 'pointer', letterSpacing: 1 }}
               data-hover
             >
-              ▶ INITIATE CASE
+              {myPlayer?.is_ready ? '✓ READY' : '○ SIGNAL READY'}
             </button>
           )}
         </div>
@@ -1424,8 +1456,6 @@ export default function HomeScreen({ onPlay }) {
 
   return (
     <>
-      <CursorGlow />
-
       {gateVisible && <LoadingGate onDone={() => setGateVisible(false)} />}
 
       <div id="cu-scroll-root" className="cu-root">
@@ -1437,12 +1467,7 @@ export default function HomeScreen({ onPlay }) {
         />
 
         <HeroSection onBeginInvestigation={handleBeginInvestigation} />
-        <IncidentSection />
-        <WorldSection />
-        <RolesSection />
         <CampusSection />
-        <EvidenceSection />
-        <NPCSection />
         <MultiplayerSection />
         <FeaturesSection />
         <CTASection onBeginInvestigation={handleBeginInvestigation} />
