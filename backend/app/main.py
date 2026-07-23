@@ -834,7 +834,7 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                         px, pz = 0.0, 0.0
                     tx, tz = task_world
                     dist = ((px - tx) ** 2 + (pz - tz) ** 2) ** 0.5
-                    if dist > 4.0:
+                    if dist > 5.5:
                         await send_to_player(room_code, p_id, {
                             "type": "ERROR",
                             "payload": {"message": "Too far from task zone to make progress."}

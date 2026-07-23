@@ -380,16 +380,16 @@ export default function TaskMinigame() {
   const taskType = activeMinigameTask.task_type
 
   const handleSuccess = () => {
-    if (ws) {
+    // Always mark task as completed locally in store immediately
+    updateTask({ ...activeMinigameTask, progress: 1.0, completed: true })
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
       // Send single completion delta: 1.0 to server
       ws.send(JSON.stringify({
         action: 'TASK_PROGRESS',
         task_id: activeMinigameTask.task_id,
         delta: 1.0,
       }))
-    } else {
-      // Offline fallback
-      updateTask({ ...activeMinigameTask, progress: 1.0, completed: true })
     }
     closeMinigame()
   }

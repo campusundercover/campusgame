@@ -212,9 +212,9 @@ function SingleTaskZone({ task }) {
       }
     }
 
-    /* Send TASK_RESET when E is released or player exits zone before completion */
-    if (wasInteracting.current && !activeNow && !task.completed) {
-      if (ws) {
+    /* Send TASK_RESET when E is released or player exits zone before completion (only if minigame is not active) */
+    if (wasInteracting.current && !activeNow && !task.completed && !activeMinigameTask) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           action:  'TASK_RESET',
           task_id: task.task_id,
