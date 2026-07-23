@@ -171,17 +171,34 @@ function SingleTaskZone({ task }) {
   const dist   = Math.sqrt(dx * dx + dz * dz)
   const isInZone = dist < 3.5
 
+  const taskStartedId        = useGameStore((s) => s.taskStartedId)
+  const setTaskStarted       = useGameStore((s) => s.setTaskStarted)
   const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
   const openMinigame         = useGameStore((s) => s.openMinigame)
 
-  /* Task interaction & progress streaming */
+  const isStarted = taskStartedId === task.task_id
+
+  /* Clear taskStartedId if player walks away from zone or task completes */
+  useEffect(() => {
+    if (isStarted && !isInZone) {
+      setTaskStarted(null)
+    }
+  }, [isStarted, isInZone, setTaskStarted])
+
+  useEffect(() => {
+    if (task.completed && isStarted) {
+      setTaskStarted(null)
+    }
+  }, [task.completed, isStarted, setTaskStarted])
+
+  /* Task interaction & progress streaming — only active if player clicked "START TASK" first */
   useFrame((_, delta) => {
     const t = Date.now() * 0.001
 
     if (ringRef.current) {
-      const interactPulse = isInZone && isInteracting.current
+      const interactPulse = isStarted && isInZone && isInteracting.current
       ringRef.current.rotation.y = t * 0.45
-      const pulse = interactPulse ? 1 + Math.sin(t * 8) * 0.09 : isInZone ? 1 + Math.sin(t * 5) * 0.06 : 1.0
+      const pulse = interactPulse ? 1 + Math.sin(t * 8) * 0.09 : (isStarted && isInZone) ? 1 + Math.sin(t * 5) * 0.06 : 1.0
       ringRef.current.scale.setScalar(pulse)
     }
     if (innerRef.current) {
@@ -191,7 +208,7 @@ function SingleTaskZone({ task }) {
       iconPlaneRef.current.rotation.y = t * 0.3
     }
 
-    const activeNow = isInZone && isInteracting.current && !task.completed
+    const activeNow = isStarted && isInZone && isInteracting.current && !task.completed
 
     /* Stream task progress when holding E inside zone */
     if (activeNow) {
@@ -230,7 +247,9 @@ function SingleTaskZone({ task }) {
   if (task.completed && !showSparkle) return null
 
   const icon    = TASK_ICONS[task.task_type] || TASK_ICONS.DEFAULT
-  const ringCol = isInZone ? (isInteracting.current ? '#a78bfa' : '#22c55e') : '#f59e0b'
+  const ringCol = isStarted
+    ? (isInZone ? (isInteracting.current ? '#a78bfa' : '#22c55e') : '#f59e0b')
+    : '#475569'
 
   return (
     <group position={zonePos}>
@@ -268,8 +287,8 @@ function SingleTaskZone({ task }) {
         </Html>
       )}
 
-      {/* ── "Hold E" HUD prompt — visible only when inside zone and not done ── */}
-      {isInZone && !task.completed && (
+      {/* ── "Hold E" HUD prompt — visible ONLY when task is started, inside zone, and not done ── */}
+      {isStarted && isInZone && !task.completed && (
         <Html position={[0, 2.0, 0]} center distanceFactor={10}>
           <div className="task-interact-prompt">
             {isInteracting.current ? '⚡ Interacting…' : '[ E ] Hold to interact'}

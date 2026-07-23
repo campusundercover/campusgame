@@ -91,8 +91,12 @@ const TASK_ICONS = {
 
 function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiveTask, distance, role }) {
   const currentArea = useGameStore((s) => s.currentArea)
+  const taskStartedId = useGameStore((s) => s.taskStartedId)
+  const setTaskStarted = useGameStore((s) => s.setTaskStarted)
+
   const isInZone = currentArea === task.location
   const progressPercent = Math.round(task.progress * 100)
+  const isStarted = taskStartedId === task.task_id
   
   // Get dynamic details based on player role
   const roleKey = (role && TASK_MAPPINGS[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
@@ -106,6 +110,16 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
 
   const IconComp = TASK_ICONS[task.task_type] || AlertCircle
   const isTracked = activeTaskId === task.task_id
+
+  const handleStartClick = (e) => {
+    e.stopPropagation()
+    if (isStarted) {
+      setTaskStarted(null)
+    } else {
+      setActiveTask(task.task_id)
+      setTaskStarted(task.task_id)
+    }
+  }
 
   const handleTrackClick = (e) => {
     e.stopPropagation()
@@ -125,7 +139,7 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
       layout
       style={cardStyle}
       onClick={onToggleExpand}
-      className={`task-item-card ${task.completed ? 'completed' : ''} ${isInZone && !task.completed ? 'active-zone' : ''} ${isTracked && !task.completed ? 'active-tracked' : ''}`}
+      className={`task-item-card ${task.completed ? 'completed' : ''} ${isStarted ? 'task-started' : ''} ${isInZone && !task.completed ? 'active-zone' : ''} ${isTracked && !task.completed ? 'active-tracked' : ''}`}
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
@@ -136,7 +150,12 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
           <IconComp size={14} />
         </div>
         <div className="task-card-details">
-          <div className="task-card-title">{details.name}</div>
+          <div className="task-card-title">
+            {details.name}
+            {isStarted && !task.completed && (
+              <span className="task-started-badge">READY</span>
+            )}
+          </div>
           <div className="task-card-loc-dist">
             <span>📍 {task.location}</span>
             {distance !== null && !task.completed && (
@@ -188,6 +207,13 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
 
             {!task.completed && (
               <div className="task-actions-row">
+                <button
+                  className={`task-btn-start ${isStarted ? 'started' : ''}`}
+                  onClick={handleStartClick}
+                >
+                  <Play size={12} fill={isStarted ? '#10b981' : 'currentColor'} />
+                  {isStarted ? 'ACTIVE TASK' : 'START TASK'}
+                </button>
                 <button className="task-btn-track" onClick={handleTrackClick}>
                   {isTracked ? 'UNTRACK' : 'TRACK MISSION'}
                 </button>
@@ -200,7 +226,7 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
       {isInZone && !task.completed && (
         <div className="task-zone-hint">
           <Navigation size={10} className="animate-pulse" />
-          <span>Objective Area Reached! Hold <kbd>E</kbd></span>
+          <span>{isStarted ? 'Objective Zone Reached! Hold E' : 'Click "START TASK" to interact'}</span>
         </div>
       )}
     </motion.div>
@@ -208,6 +234,7 @@ function TaskItemCard({ task, isExpanded, onToggleExpand, activeTaskId, setActiv
 }
 
 export default function TaskList() {
+  const setTaskStarted = useGameStore((s) => s.setTaskStarted)
   const tasks = useGameStore((s) => s.tasks)
   const role = useGameStore((s) => s.role)
   const playerPosition = useGameStore((s) => s.playerPosition)
@@ -307,10 +334,11 @@ export default function TaskList() {
         <button 
           className="task-sort-btn" 
           onClick={() => {
-            // Find first incomplete task and track it
+            // Find first incomplete task, track & start it
             const firstIncomplete = activeTasks[0]
             if (firstIncomplete) {
               setActiveTask(firstIncomplete.task_id)
+              setTaskStarted(firstIncomplete.task_id)
             }
           }}
           disabled={activeTasks.length === 0}

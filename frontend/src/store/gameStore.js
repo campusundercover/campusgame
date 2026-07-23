@@ -88,6 +88,7 @@ const useGameStore = create((set, get) => ({
   // ── Tasks ──
   tasks: [],
   activeTaskId: null,
+  taskStartedId: null,
   taskProgress: 0,
   globalTaskPercent: 0,
   globalTaskCompleted: 0,
@@ -178,6 +179,8 @@ const useGameStore = create((set, get) => ({
     tasks: s.tasks.map(t => t.task_id === updated.task_id ? updated : t)
   })),
   setActiveTask: (id) => set({ activeTaskId: id }),
+  setTaskStarted: (id) => set({ taskStartedId: id }),
+  setTaskStartedId: (id) => set({ taskStartedId: id }),
   setTaskProgress: (p) => set({ taskProgress: p }),
   setGlobalTaskPercent: (val) => set((s) => ({
     globalTaskPercent: typeof val === 'object' ? (val.percent ?? 0) : val,
