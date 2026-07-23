@@ -574,10 +574,20 @@ export default function Player() {
     return null
   }
 
+  const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
+  const meetingActive = useGameStore((s) => s.meetingActive)
+  const gamePhase = useGameStore((s) => s.gamePhase)
+
   const lastTaskSentRef = useRef(0)
 
   useFrame((_, delta) => {
     if (!groupRef.current) return
+    if (activeMinigameTask || meetingActive || gamePhase === 'meeting' || gamePhase === 'accusation') {
+      if (isWalkingState) setIsWalkingState(false)
+      if (isRunningState) setIsRunningState(false)
+      return
+    }
+
     const keys = keysRef.current
     const speed = keys.sprint ? PLAYER_SPEED_BASE * SPRINT_MULT : PLAYER_SPEED_BASE
 

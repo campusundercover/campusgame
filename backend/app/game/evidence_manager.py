@@ -76,6 +76,30 @@ DENSITY_MULTIPLIER = {
 }
 
 
+ANALYST_NOTES = {
+    'DIGITAL': [
+        "Looks like server metadata. Might mean something to the right person.",
+        "Encrypted transfer log fragment. Contains timestamp traces.",
+        "System log dump recovered from workstation buffer."
+    ],
+    'PHYSICAL': [
+        "Physical artifact left at the scene. Shows signs of recent handling.",
+        "Material evidence recovered nearby. Could yield fingerprints.",
+        "Dropped item found near key access point."
+    ],
+    'TESTIMONIAL': [
+        "Verbal statement recorded during questioning.",
+        "Witness testimony regarding suspicious activity.",
+        "Unsolicited tip from campus personnel."
+    ],
+    'FABRICATED': [
+        "Document found near workstation. Inconsistencies apparent.",
+        "Suspicious paper trail. Seems deliberately placed.",
+        "Orphaned file record with questionable metadata."
+    ]
+}
+
+
 class EvidenceItem:
     def __init__(
         self,
@@ -160,6 +184,29 @@ class EvidenceItem:
             'description': self.description,
         }
         return data
+
+    def to_player_card(self, viewer_role: str) -> dict:
+        """
+        Build role-aware card payload for collector:
+        - DETECTIVE: full card with points_to_player_id and reliability_score.
+        - Non-DETECTIVE: redacted card with flavor analyst_note, hiding points_to_player_id and reliability_score.
+        """
+        card = {
+            'evidence_id': self.evidence_id,
+            'template_id': self.template_id,
+            'evidence_type': self.evidence_type,
+            'area': self.area,
+            'area_found': self.area_found,
+            'description': self.description,
+        }
+        if viewer_role == 'DETECTIVE':
+            card['points_to_player_id'] = self.points_to_player_id
+            card['reliability_score'] = round(self.reliability_score, 2)
+        else:
+            notes = ANALYST_NOTES.get(self.evidence_type, ANALYST_NOTES['PHYSICAL'])
+            card['analyst_note'] = random.choice(notes)
+        return card
+
 
 
 class EvidenceManager:

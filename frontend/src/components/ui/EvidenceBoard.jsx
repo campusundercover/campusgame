@@ -1,30 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import useGameStore from '../../store/gameStore'
+import { TYPE_ICONS, TYPE_COLORS, ReliabilityStars } from '../../utils/evidenceVisuals'
+import SuspectDossier from './SuspectDossier'
 
-const TYPE_ICONS = {
-  DIGITAL: '🔌',
-  PHYSICAL: '🪪',
-  TESTIMONIAL: '💬',
-  FABRICATED: '⚠️',
-}
-
-const TYPE_COLORS = {
-  DIGITAL: '#00BFFF',    // electric blue
-  PHYSICAL: '#FFD700',   // gold
-  TESTIMONIAL: '#90EE90',// light green
-  FABRICATED: '#FF6B6B', // alert red
-}
-
-function ReliabilityStars({ score }) {
-  const filled = Math.round(score * 5)
-  return (
-    <div className="reliability-stars">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span key={i} className={`star ${i < filled ? 'filled' : ''}`}>★</span>
-      ))}
-    </div>
-  )
-}
 
 export default function EvidenceBoard() {
   const evidenceBoard = useGameStore((s) => s.evidenceBoard)
@@ -34,6 +12,7 @@ export default function EvidenceBoard() {
   const role = useGameStore((s) => s.role)
 
   const [isOpen, setIsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('board') // 'board' | 'dossier'
   const [positions, setPositions] = useState({})
   const [draggedId, setDraggedId] = useState(null)
   const [correlateMode, setCorrelateMode] = useState(false)
@@ -162,9 +141,46 @@ export default function EvidenceBoard() {
             <div className="header-left">
               <h2>📌 CASE INVESTIGATION BOARD</h2>
               <span className="badge">DETECTIVE AUTHORIZED</span>
+
+              {/* Tab Switcher */}
+              <div style={{ display: 'flex', gap: '8px', marginLeft: '20px' }}>
+                <button
+                  onClick={() => setActiveTab('board')}
+                  style={{
+                    background: activeTab === 'board' ? '#b22222' : '#3b2a1a',
+                    color: '#f5d0a9',
+                    border: '1px solid #5c402b',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 'bold',
+                  }}
+                >
+                  📌 Evidence Board ({evidenceBoard.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('dossier')}
+                  style={{
+                    background: activeTab === 'dossier' ? '#b22222' : '#3b2a1a',
+                    color: '#f5d0a9',
+                    border: '1px solid #5c402b',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: 'bold',
+                  }}
+                >
+                  🗂 Suspect Dossiers
+                </button>
+              </div>
             </div>
+
             <div className="header-right">
-              {correlateMode && (
+              {activeTab === 'board' && correlateMode && (
                 <div className="correlation-alert animate-pulse">
                   LINKING MODE: Choose another card to connect with yarn string
                   <button className="cancel-btn" onClick={() => { setCorrelateMode(false); setCorrelateFrom(null) }}>Cancel</button>
@@ -174,117 +190,124 @@ export default function EvidenceBoard() {
             </div>
           </div>
 
-          {/* SVG Yarn strings */}
-          <svg className="corkboard-svg-yarn">
-            {correlations.map(([idA, idB, meta], i) => {
-              const posA = positions[idA]
-              const posB = positions[idB]
-              if (!posA || !posB) return null
+          {activeTab === 'dossier' ? (
+            <SuspectDossier />
+          ) : (
+            <>
+              {/* SVG Yarn strings */}
+              <svg className="corkboard-svg-yarn">
+                {correlations.map(([idA, idB, meta], i) => {
+                  const posA = positions[idA]
+                  const posB = positions[idB]
+                  if (!posA || !posB) return null
 
-              const cx1 = posA.x + 95
-              const cy1 = posA.y + 75
-              const cx2 = posB.x + 95
-              const cy2 = posB.y + 75
+                  const cx1 = posA.x + 95
+                  const cy1 = posA.y + 75
+                  const cx2 = posB.x + 95
+                  const cy2 = posB.y + 75
 
-              const isSelected = selectedYarn === i
+                  const isSelected = selectedYarn === i
 
-              return (
-                <g key={i} onClick={() => setSelectedYarn(isSelected ? null : i)}>
-                  {/* Outer shadow for depth */}
-                  <line
-                    x1={cx1} y1={cy1} x2={cx2} y2={cy2}
-                    stroke="rgba(0,0,0,0.5)"
-                    strokeWidth="7"
-                    strokeLinecap="round"
-                  />
-                  {/* Crimson yarn */}
-                  <line
-                    x1={cx1} y1={cy1} x2={cx2} y2={cy2}
-                    stroke={isSelected ? '#f59e0b' : '#b22222'}
-                    strokeWidth={isSelected ? '6' : '4.5'}
-                    strokeLinecap="round"
-                    className="yarn-line-draw"
-                  />
-                  {/* Star intersection dot */}
-                  <circle cx={(cx1+cx2)/2} cy={(cy1+cy2)/2} r="4" fill="#fed7aa" />
-                </g>
-              )
-            })}
-          </svg>
+                  return (
+                    <g key={i} onClick={() => setSelectedYarn(isSelected ? null : i)}>
+                      {/* Outer shadow for depth */}
+                      <line
+                        x1={cx1} y1={cy1} x2={cx2} y2={cy2}
+                        stroke="rgba(0,0,0,0.5)"
+                        strokeWidth="7"
+                        strokeLinecap="round"
+                      />
+                      {/* Crimson yarn */}
+                      <line
+                        x1={cx1} y1={cy1} x2={cx2} y2={cy2}
+                        stroke={isSelected ? '#f59e0b' : '#b22222'}
+                        strokeWidth={isSelected ? '6' : '4.5'}
+                        strokeLinecap="round"
+                        className="yarn-line-draw"
+                      />
+                      {/* Star intersection dot */}
+                      <circle cx={(cx1+cx2)/2} cy={(cy1+cy2)/2} r="4" fill="#fed7aa" />
+                    </g>
+                  )
+                })}
+              </svg>
 
-          {/* Draggable Cards */}
-          {evidenceBoard.map(item => {
-            const pos = positions[item.evidence_id] || { x: 100, y: 100 }
-            const isCorrelatingSource = correlateFrom?.evidence_id === item.evidence_id
-            const canBeLinkedTarget = correlateMode && correlateFrom?.evidence_id !== item.evidence_id
-            const evColor = TYPE_COLORS[item.evidence_type] || '#fff'
+              {/* Draggable Cards */}
+              {evidenceBoard.map(item => {
+                const pos = positions[item.evidence_id] || { x: 100, y: 100 }
+                const isCorrelatingSource = correlateFrom?.evidence_id === item.evidence_id
+                const canBeLinkedTarget = correlateMode && correlateFrom?.evidence_id !== item.evidence_id
+                const evColor = TYPE_COLORS[item.evidence_type] || '#fff'
 
-            return (
-              <div
-                key={item.evidence_id}
-                className={`corkboard-card ${isCorrelatingSource ? 'source-linking' : ''} ${canBeLinkedTarget ? 'target-linkable' : ''}`}
-                style={{
-                  transform: `translate(${pos.x}px, ${pos.y}px)`,
-                  '--ev-color': evColor
-                }}
-                onMouseDown={(e) => handleMouseDown(e, item.evidence_id)}
-                onClick={() => handleCardClick(item)}
-              >
-                {/* Push Pin */}
-                <div className="card-pin">📌</div>
+                return (
+                  <div
+                    key={item.evidence_id}
+                    className={`corkboard-card ${isCorrelatingSource ? 'source-linking' : ''} ${canBeLinkedTarget ? 'target-linkable' : ''}`}
+                    style={{
+                      transform: `translate(${pos.x}px, ${pos.y}px)`,
+                      '--ev-color': evColor
+                    }}
+                    onMouseDown={(e) => handleMouseDown(e, item.evidence_id)}
+                    onClick={() => handleCardClick(item)}
+                  >
+                    {/* Push Pin */}
+                    <div className="card-pin">📌</div>
 
-                {/* Card body */}
-                <div className="card-inner">
-                  <div className="card-meta">
-                    <span className="type-icon">{TYPE_ICONS[item.evidence_type]}</span>
-                    <div>
-                      <div className="type-label">{item.evidence_type}</div>
-                      <div className="area-label">{item.area_found || item.area}</div>
+                    {/* Card body */}
+                    <div className="card-inner">
+                      <div className="card-meta">
+                        <span className="type-icon">{TYPE_ICONS[item.evidence_type]}</span>
+                        <div>
+                          <div className="type-label">{item.evidence_type}</div>
+                          <div className="area-label">{item.area_found || item.area}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="card-desc">
+                        {item.description || item.template_data?.description || 'Collected clue file.'}
+                      </div>
+
+                      <div className="card-footer">
+                        <div className="target-label">
+                          Points to: <strong>{item.points_to_player_id || 'Neutral'}</strong>
+                        </div>
+                        
+                        <div className="stars-row">
+                          <ReliabilityStars score={item.reliability_score ?? 0.8} />
+                        </div>
+
+                        {!correlateMode && (
+                          <button className="link-btn" onClick={() => startCorrelate(item)}>
+                            🔗 Link
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  
-                  <div className="card-desc">
-                    {item.description || item.template_data?.description || 'Collected clue file.'}
-                  </div>
+                )
+              })}
 
-                  <div className="card-footer">
-                    <div className="target-label">
-                      Points to: <strong>{item.points_to_player_id || 'Neutral'}</strong>
-                    </div>
-                    
-                    <div className="stars-row">
-                      <ReliabilityStars score={item.reliability_score ?? 0.8} />
-                    </div>
-
-                    {!correlateMode && (
-                      <button className="link-btn" onClick={() => startCorrelate(item)}>
-                        🔗 Link
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Yarn Connection Details Tooltip Panel */}
-          {selectedYarn !== null && correlations[selectedYarn] && (
-            <div className="yarn-details-panel">
-              <h4>🔗 Evidence Link Evaluation</h4>
-              {correlations[selectedYarn][2] ? (
-                <>
-                  <p><strong>Note:</strong> {correlations[selectedYarn][2].correlation_note}</p>
-                  <p><strong>Link Confidence:</strong> {(correlations[selectedYarn][2].correlation_strength * 100).toFixed(0)}%</p>
-                  {correlations[selectedYarn][2].fabrication_warning && (
-                    <p className="warning-text">⚠️ Warning: Suspicion of falsified evidence detected!</p>
+              {/* Yarn Connection Details Tooltip Panel */}
+              {selectedYarn !== null && correlations[selectedYarn] && (
+                <div className="yarn-details-panel">
+                  <h4>🔗 Evidence Link Evaluation</h4>
+                  {correlations[selectedYarn][2] ? (
+                    <>
+                      <p><strong>Note:</strong> {correlations[selectedYarn][2].correlation_note}</p>
+                      <p><strong>Link Confidence:</strong> {(correlations[selectedYarn][2].correlation_strength * 100).toFixed(0)}%</p>
+                      {correlations[selectedYarn][2].fabrication_warning && (
+                        <p className="warning-text">⚠️ Warning: Suspicion of falsified evidence detected!</p>
+                      )}
+                    </>
+                  ) : (
+                    <p>Establishing link metrics... (Waiting for server confirmation)</p>
                   )}
-                </>
-              ) : (
-                <p>Establishing link metrics... (Waiting for server confirmation)</p>
+                  <button onClick={() => setSelectedYarn(null)}>Dismiss</button>
+                </div>
               )}
-              <button onClick={() => setSelectedYarn(null)}>Dismiss</button>
-            </div>
+            </>
           )}
+
 
           {/* Internal Corkboard styling */}
           <style>{`

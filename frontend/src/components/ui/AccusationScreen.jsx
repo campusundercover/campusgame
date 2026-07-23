@@ -6,10 +6,9 @@ export default function AccusationScreen() {
   const role = useGameStore((s) => s.role)
   const ws = useGameStore((s) => s.ws)
   const roomCode = useGameStore((s) => s.roomCode)
+  const prefilledMastermind = useGameStore((s) => s.prefilledMastermindSuspect)
 
-  // We'd normally have a players list from the store; simulate with IDs
-  // In production these come from lobby_manager broadcasts
-  const [mastermindsuspect, setMastermindsuspect] = useState('')
+  const [mastermindsuspect, setMastermindsuspect] = useState(prefilledMastermind || '')
   const [conspiratorsuspect, setConspiratorSuspect] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
@@ -22,6 +21,7 @@ export default function AccusationScreen() {
     { id: String(playerId), name: playerName },
     ...Object.entries(otherPlayers).map(([id, data]) => ({ id, name: data.username || id })),
   ]
+
 
   if (gamePhase !== 'accusation') return null
 

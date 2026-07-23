@@ -1,5 +1,6 @@
 import time as _time
 import asyncio
+import random as _rnd
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 # pyrefly: ignore [missing-import]
@@ -13,14 +14,16 @@ from app.api.v1.api import api_router
 from app.game.lobby_manager import lobby_manager, PlayerLobbyState
 from app.game.role_service import assign_roles
 from app.game.evidence_manager import evidence_manager
-from app.game.task_manager import task_manager
+from app.game.task_manager import task_manager, AREA_WORLD_POSITIONS
 from app.game.npc_manager import npc_manager
 from app.game.ability_manager import ability_manager
 from app.game.meeting_manager import meeting_manager
 from app.game.resolution_service import resolve_game
 from app.game.cctv_service import get_or_create_cctv_engine, cleanup_cctv_engine
 from app.game.correlation_engine import correlation_engine
+from app.game.suspect_dossier_service import suspect_dossier_engine
 from app.db.base import Base
+
 from app.db.session import engine, SessionLocal
 
 
@@ -77,6 +80,8 @@ class GameSessionState:
         self.modifiers: dict = {}
         self.started_at: float = 0.0
         self.is_active: bool = False
+        self.correlations_log: List[dict] = []     # server-side store of correlation evaluation dicts
+        self.movement_traces: Dict[str, list] = {}  # player_id -> list of visited area presence dicts
 
     @property
     def elapsed_seconds(self) -> int:
@@ -87,6 +92,29 @@ class GameSessionState:
 # room_code -> GameSessionState
 active_game_states: Dict[str, GameSessionState] = {}
 active_game_loops: Dict[str, asyncio.Task] = {}
+
+
+async def push_dossier_update(room_code: str, gs: GameSessionState):
+    """Helper to build and send a refreshed suspect dossier to the Detective."""
+    detective_id = next(
+        (int(pid) for pid, role in gs.assignments.items() if role == 'DETECTIVE'), None
+    )
+    if detective_id:
+        cctv = get_or_create_cctv_engine(room_code)
+        dossier = suspect_dossier_engine.build_dossier(
+            room_code=room_code,
+            player_ids=list(gs.assignments.keys()),
+            assignments=gs.assignments,
+            evidence_manager=evidence_manager,
+            cctv_engine=cctv,
+            correlations=gs.correlations_log,
+            movement_traces=gs.movement_traces,
+        )
+        await send_to_player(room_code, detective_id, {
+            "type": "SUSPECT_DOSSIER_UPDATE",
+            "payload": {"suspects": dossier}
+        })
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -561,21 +589,33 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             # ── Collect evidence ──
             elif action == "COLLECT_EVIDENCE":
                 ev_id = data.get("evidence_id")
+                client_pos = data.get("position")
                 all_ev = evidence_manager.get_room_evidence(room_code)
                 ev_item = next((e for e in all_ev if e.evidence_id == ev_id), None)
                 if not ev_item:
                     continue
 
+                def _extract_xz(p):
+                    if isinstance(p, dict):
+                        return float(p.get('x', 0.0)), float(p.get('z', 0.0))
+                    elif isinstance(p, (list, tuple)) and len(p) >= 3:
+                        return float(p[0]), float(p[2])
+                    return 0.0, 0.0
+
+                # Update position if provided in payload
+                if client_pos and gs:
+                    gs.player_positions.setdefault(pid_str, {})['position'] = client_pos
+
                 # Server-side distance validation
                 player_pos_data = getattr(gs, 'player_positions', {}).get(pid_str)
                 if player_pos_data and 'position' in player_pos_data:
-                    p_pos = player_pos_data['position']
-                    ev_pos = ev_item.position
-                    dx = p_pos.get('x', 0) - ev_pos.get('x', 0)
-                    dz = p_pos.get('z', 0) - ev_pos.get('z', 0)
+                    px, pz = _extract_xz(player_pos_data['position'])
+                    ex, ez = _extract_xz(ev_item.position)
+                    dx = px - ex
+                    dz = pz - ez
                     dist = (dx * dx + dz * dz) ** 0.5
-                    # Validate that player is within reasonable collect radius (e.g., 3.8 units including latency buffer)
-                    if dist > 3.8:
+                    # Validate that player is within reasonable collect radius (e.g. 5.5 units including latency buffer)
+                    if dist > 5.5:
                         await send_to_player(room_code, p_id, {
                             "type": "ERROR",
                             "payload": {"message": "Too far away to collect evidence."}
@@ -583,12 +623,19 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                         continue
 
                 item = evidence_manager.collect_evidence(room_code, ev_id, pid_str)
+
                 if item:
                     # Log action for NPC observation system
                     npc_manager.log_player_action(room_code, pid_str, 'EVIDENCE_COLLECTED', item.area)
                     await broadcast_to_room(room_code, {
                         "type": "EVIDENCE_COLLECTED",
                         "payload": {"evidence": item.to_dict(), "collector_id": pid_str}
+                    })
+                    # Send collector private role-aware evidence card
+                    collector_role = gs.assignments.get(pid_str, "INVESTIGATOR")
+                    await send_to_player(room_code, p_id, {
+                        "type": "EVIDENCE_CARD",
+                        "payload": item.to_player_card(viewer_role=collector_role)
                     })
                     # Update detective's board privately
                     detective_id = next(
@@ -599,6 +646,8 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "type": "EVIDENCE_BOARD_UPDATE",
                             "payload": {"board": evidence_manager.get_detective_board(room_code)}
                         })
+                        await push_dossier_update(room_code, gs)
+
 
             # ── CCTV movement recording (called by client every 5s) ──
             elif action == "RECORD_MOVEMENT":
@@ -618,7 +667,7 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                 target_npc = data.get("target_npc_id")
 
                 # Server-side role gate — mirror ability_manager.py ABILITY_DEFINITIONS
-                DETECTIVE_ONLY = {"CCTV_ANALYSIS", "CORRELATE_EVIDENCE", "DIGITAL_ANALYSIS", "RECOVER_LOGS"}
+                DETECTIVE_ONLY = {"CCTV_ANALYSIS", "CORRELATE_EVIDENCE", "DIGITAL_ANALYSIS", "RECOVER_LOGS", "MOVEMENT_TRACE"}
                 VILLAIN_ONLY   = {"PLANT_FAKE_EVIDENCE", "DESTROY_EVIDENCE", "TRIGGER_MEETING",
                                   "MANIPULATE_NPC", "FRAME_PLAYER", "SECURE_PERIMETER", "CREATE_ALIBI"}
                 player_role = gs.assignments.get(pid_str)
@@ -650,6 +699,30 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                             "payload": report
                         })
 
+                    # Movement Trace — Detective exclusive
+                    elif ability_id == "MOVEMENT_TRACE":
+                        area = target_area or "Security Office"
+                        cctv = get_or_create_cctv_engine(room_code)
+                        trace = cctv.generate_movement_trace(
+                            requested_area=area,
+                            time_window_minutes=8,
+                            current_game_time=gs.elapsed_seconds,
+                            player_id_lookup={v: k for k, v in cctv.color_assignments.items()},
+                        )
+                        for presence in trace.get("identified_presence", []):
+                            pid_tr = presence["player_id"]
+                            gs.movement_traces.setdefault(pid_tr, []).append({
+                                "area": area,
+                                "first_seen": presence.get("first_seen"),
+                                "last_seen": presence.get("last_seen"),
+                                "duration_seconds": presence.get("duration_seconds")
+                            })
+                        await send_to_player(room_code, p_id, {
+                            "type": "MOVEMENT_TRACE_REPORT",
+                            "payload": trace
+                        })
+                        await push_dossier_update(room_code, gs)
+
                     # Correlate Evidence — Detective exclusive
                     elif ability_id == "CORRELATE_EVIDENCE":
                         ev_id_a = data.get("evidence_id_a")
@@ -663,10 +736,13 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                                 ev_b.to_dict(include_hidden=True),
                                 difficulty=room.difficulty,
                             )
+                            gs.correlations_log.append(corr)
                             await send_to_player(room_code, p_id, {
                                 "type": "CORRELATION_RESULT",
                                 "payload": {**corr, "evidence_id_a": ev_id_a, "evidence_id_b": ev_id_b}
                             })
+                            await push_dossier_update(room_code, gs)
+
 
                     # Handle ability-specific effects
                     elif ability_id == "PLANT_FAKE_EVIDENCE":
@@ -738,17 +814,122 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
             # ── Task events ──
             elif action == "TASK_PROGRESS":
                 task_id = data.get("task_id")
-                delta = data.get("delta", 0.05)
+                raw_delta = float(data.get("delta", 0.05))
+
+                # ── Look up the task object for server-side checks ──
+                task_obj = task_manager.get_task_by_id(room_code, pid_str, task_id)
+                if not task_obj:
+                    continue
+
+                # 1. Server-side proximity validation (mirrors COLLECT_EVIDENCE pattern)
+                task_world = AREA_WORLD_POSITIONS.get(task_obj.location)
+                player_pos_data = getattr(gs, 'player_positions', {}).get(pid_str)
+                if task_world and player_pos_data and 'position' in player_pos_data:
+                    p = player_pos_data['position']
+                    if isinstance(p, dict):
+                        px, pz = float(p.get('x', 0.0)), float(p.get('z', 0.0))
+                    elif isinstance(p, (list, tuple)) and len(p) >= 3:
+                        px, pz = float(p[0]), float(p[2])
+                    else:
+                        px, pz = 0.0, 0.0
+                    tx, tz = task_world
+                    dist = ((px - tx) ** 2 + (pz - tz) ** 2) ** 0.5
+                    if dist > 4.0:
+                        await send_to_player(room_code, p_id, {
+                            "type": "ERROR",
+                            "payload": {"message": "Too far from task zone to make progress."}
+                        })
+                        continue
+
+                # 2. Clamp delta to prevent inflated progress for small ticks, but allow delta >= 0.9 for minigame completion.
+                if raw_delta >= 0.9:
+                    delta = 1.0
+                else:
+                    duration = max(1, task_obj.duration_seconds)
+                    max_delta = 1.0 / (duration * 2)
+                    delta = min(raw_delta, max_delta)
+
                 updated = task_manager.update_task_progress(room_code, pid_str, task_id, delta)
                 if updated:
                     await send_to_player(room_code, p_id, {
                         "type": "TASK_UPDATED", "payload": updated
                     })
                     if updated.get("completed"):
+                        if task_obj.is_sabotage:
+                            # ── Sabotage task completed: apply real side-effect ──
+
+                            effect = task_manager.apply_sabotage_effect(room_code, task_obj.task_type)
+                            effect_result = {}
+
+                            if effect:
+                                effect_type = effect['effect']
+                                effect_area = effect['area']
+
+                                if effect_type == 'CORRUPT_EVIDENCE':
+                                    # Destroy a random uncollected evidence item in the area
+                                    area_evidence = [
+                                        e for e in evidence_manager.get_room_evidence(room_code)
+                                        if e.area == effect_area and not e.is_collected and not e.is_destroyed
+                                    ]
+                                    if area_evidence:
+                                        target_ev = area_evidence[0]
+                                        evidence_manager.destroy_evidence(room_code, target_ev.evidence_id)
+                                        # Broadcast the destruction publicly (looks organic — no villain attribution)
+                                        await broadcast_to_room(room_code, {
+                                            "type": "EVIDENCE_DESTROYED",
+                                            "payload": {"evidence_id": target_ev.evidence_id}
+                                        })
+                                        effect_result['destroyed_evidence_id'] = target_ev.evidence_id
+
+                                elif effect_type == 'NPC_SUSPICION_SHIFT':
+                                    # Log action attributed to a random innocent — NPCs will
+                                    # later misreport this as suspicious behaviour by that player.
+                                    innocent_ids = [
+                                        pid for pid, r in gs.assignments.items()
+                                        if r not in ('MASTERMIND', 'CONSPIRATOR')
+                                    ]
+                                    if innocent_ids:
+                                        scapegoat = _rnd.choice(innocent_ids)
+                                        npc_manager.log_player_action(
+                                            room_code, scapegoat, 'SABOTAGE', effect_area
+                                        )
+                                        effect_result['scapegoat_id'] = scapegoat
+
+                                effect_result['description'] = effect.get('description', '')
+
+                            # Notify villains-only channel (Mastermind + Conspirator)
+                            villain_ids = [
+                                int(pid) for pid, r in gs.assignments.items()
+                                if r in ('MASTERMIND', 'CONSPIRATOR')
+                            ]
+                            for vid in villain_ids:
+                                await send_to_player(room_code, vid, {
+                                    "type": "SABOTAGE_TASK_COMPLETED",
+                                    "payload": {
+                                        "player_id": pid_str,
+                                        "task": updated,
+                                        "effect": effect_result,
+                                    }
+                                })
+                            # Log the action for NPC observation system (attributed to the villain)
+                            npc_manager.log_player_action(
+                                room_code, pid_str, 'SABOTAGE_TASK', task_obj.location
+                            )
+
+                        else:
+                            # ── Innocent task completed: normal public broadcast ──
+                            await broadcast_to_room(room_code, {
+                                "type": "TASK_COMPLETED",
+                                "payload": {"player_id": pid_str, "task": updated}
+                            })
+
+                        # ── Broadcast overall task progress to the entire room ──
+                        global_task_progress = task_manager.get_room_completion_percent(room_code)
                         await broadcast_to_room(room_code, {
-                            "type": "TASK_COMPLETED",
-                            "payload": {"player_id": pid_str, "task": updated}
+                            "type": "GLOBAL_TASK_PROGRESS",
+                            "payload": global_task_progress
                         })
+
 
             elif action == "TASK_RESET":
                 task_id = data.get("task_id")

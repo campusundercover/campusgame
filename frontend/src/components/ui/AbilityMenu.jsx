@@ -3,6 +3,7 @@ import useGameStore from '../../store/gameStore'
 
 const ROLE_ABILITY_ICONS = {
   CCTV_ANALYSIS:      '📷',
+  MOVEMENT_TRACE:     '📍',
   DIGITAL_ANALYSIS:   '💻',
   RECOVER_LOGS:       '🗄️',
   CORRELATE_EVIDENCE: '🔗',
@@ -15,6 +16,7 @@ const ROLE_ABILITY_ICONS = {
   SECURE_PERIMETER:   '🔒',
   CREATE_ALIBI:       '📋',
 }
+
 
 function CooldownRing({ progress }) {
   const r = 18

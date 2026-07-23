@@ -40,7 +40,17 @@ ABILITY_DEFINITIONS = {
             'cooldown_easy': 0, 'cooldown_medium': 0, 'cooldown_hard': 0,
             'max_uses': 10,
         },
+        {
+            'ability_id': 'MOVEMENT_TRACE',
+            'name': 'Movement Trace',
+            'description': 'Cross-reference security clearance logs to reveal real identities present in an area during a time window (not anonymized).',
+            'location_required': 'Security Office',
+            'duration_seconds': 60,
+            'cooldown_easy': 999999, 'cooldown_medium': 999999, 'cooldown_hard': 999999,
+            'max_uses': 2,
+        },
     ],
+
     'INVESTIGATOR': [
         {
             'ability_id': 'SUBMIT_OBSERVATION',

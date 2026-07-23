@@ -1,6 +1,26 @@
 import { create } from 'zustand'
 
+// ── Screen Enum ─────────────────────────────────────────────────────────────
+// Canonical app-level screen states. Always resets to LOADING on page refresh
+// (no persistence by design — ensures the player always sees the full cinematic
+// entry flow and prevents stale auth/lobby state from a previous session).
+export const SCREENS = {
+  LOADING:          'LOADING',
+  SPLASH:           'SPLASH',
+  STORY_CINEMATIC:  'STORY_CINEMATIC',
+  CINEMATIC:        'CINEMATIC',
+  AUTH:             'AUTH',
+  LOBBY:            'LOBBY',
+  ROLE_REVEAL:      'ROLE_REVEAL',
+  GAMEPLAY:         'GAMEPLAY',
+  RESULTS:          'RESULTS',
+}
+
 const useGameStore = create((set, get) => ({
+  // ── Screen State ──
+  currentScreen:    SCREENS.LOADING,   // starts at LOADING on every page load
+  hasSeenCinematic: false,             // session-level flag; resets on refresh
+
   // ── Player State ──
   playerPosition: [0, 0.5, -35],
   playerRotation: 0,
@@ -59,11 +79,20 @@ const useGameStore = create((set, get) => ({
   evidenceBoard: [],         // Detective only: all collected evidence
   correlations: [],          // Detective only: linked evidence pairs
   evidenceCollectedCount: 0,
+  evidenceCardQueue: [],     // FIFO queue of pickup cards to display
+  personalEvidenceLog: [],   // every card this player has ever seen this match
+  suspectDossier: [],        // Detective only: compiled suspect case files
+  movementTraceReport: null, // last MOVEMENT_TRACE_REPORT payload
+
 
   // ── Tasks ──
   tasks: [],
   activeTaskId: null,
   taskProgress: 0,
+  globalTaskPercent: 0,
+  globalTaskCompleted: 0,
+  globalTaskTotal: 0,
+  activeMinigameTask: null,
 
   // ── NPCs ──
   npcs: [],
@@ -86,8 +115,12 @@ const useGameStore = create((set, get) => ({
   // ── CCTV Report ──
   cctvReport: null,        // { area, movement_replay, generated_evidence } from server
 
+  // ── Accusation Prefill ──
+  prefilledMastermindSuspect: null,
+
   // ── Results ──
   gameResult: null,
+
 
   // ── WebSocket ──
   ws: null,
@@ -107,6 +140,8 @@ const useGameStore = create((set, get) => ({
   setPlayerName: (name) => set({ playerName: name }),
   setAuthToken: (token) => set({ authToken: token }),
   setTimerSeconds: (s) => set({ timerSeconds: s, timeRemaining: s }),
+  setCurrentScreen:    (screen) => set({ currentScreen: screen }),
+  setHasSeenCinematic: (val)    => set({ hasSeenCinematic: val }),
 
   tickTimer: () => set((state) => {
     const newTime = Math.max(0, state.timeRemaining - 1)
@@ -125,6 +160,17 @@ const useGameStore = create((set, get) => ({
     correlations: [...s.correlations.filter(c => !(c[0] === a && c[1] === b || c[0] === b && c[1] === a)), [a, b, data]]
   })),
   incrementEvidenceCollected: () => set((s) => ({ evidenceCollectedCount: s.evidenceCollectedCount + 1 })),
+  pushEvidenceCard: (card) => set((s) => ({
+    evidenceCardQueue: [...s.evidenceCardQueue, card],
+    personalEvidenceLog: [...s.personalEvidenceLog, card]
+  })),
+  popEvidenceCard: () => set((s) => ({
+    evidenceCardQueue: s.evidenceCardQueue.slice(1)
+  })),
+  setSuspectDossier: (list) => set({ suspectDossier: list }),
+  setMovementTraceReport: (report) => set({ movementTraceReport: report }),
+
+
 
   // Task actions
   setTasks: (tasks) => set({ tasks }),
@@ -133,6 +179,18 @@ const useGameStore = create((set, get) => ({
   })),
   setActiveTask: (id) => set({ activeTaskId: id }),
   setTaskProgress: (p) => set({ taskProgress: p }),
+  setGlobalTaskPercent: (val) => set((s) => ({
+    globalTaskPercent: typeof val === 'object' ? (val.percent ?? 0) : val,
+    globalTaskCompleted: typeof val === 'object' ? (val.completed ?? s.globalTaskCompleted) : s.globalTaskCompleted,
+    globalTaskTotal: typeof val === 'object' ? (val.total ?? s.globalTaskTotal) : s.globalTaskTotal,
+  })),
+  setGlobalTaskProgress: (data) => set({
+    globalTaskPercent: typeof data === 'object' ? (data.percent ?? 0) : data,
+    globalTaskCompleted: data?.completed || 0,
+    globalTaskTotal: data?.total || 0,
+  }),
+  openMinigame: (task) => set({ activeMinigameTask: task }),
+  closeMinigame: () => set({ activeMinigameTask: null }),
 
   // NPC actions
   setNpcs: (npcs) => set({ npcs }),
@@ -162,6 +220,8 @@ const useGameStore = create((set, get) => ({
 
   // Game result
   setGameResult: (result) => set({ gameResult: result, gamePhase: 'results' }),
+  setPrefilledMastermindSuspect: (pid) => set({ prefilledMastermindSuspect: pid }),
+
 
   // WS
   setWs: (ws) => set({ ws }),

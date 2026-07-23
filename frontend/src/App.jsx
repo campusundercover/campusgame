@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import GameScene from './components/game/GameScene'
 import RoleRevealScreen from './components/ui/RoleRevealScreen'
 import HomeScreen, { getBackendHost, getWsProtocol } from './components/ui/HomeScreen'
+import SplashScreen from './components/ui/SplashScreen'
+import StoryCinematic from './components/ui/StoryCinematic'
 import useGameStore from './store/gameStore'
+import { SCREENS } from './store/gameStore'
 
 /* ──────────────────── Loading Screen ──────────────────── */
 function LoadingScreen({ onFinish }) {
@@ -56,7 +59,7 @@ function LoadingScreen({ onFinish }) {
             <span className="crest-symbol">✝</span>
           </div>
           <div className="loading-title-group">
-            <h1 className="loading-title">CAMPUS UNDERCOVER</h1>
+            <h1 className="loading-title">CAMPUS GAME</h1>
             <p className="loading-subtitle">THE CHRIST MYSTERY</p>
           </div>
         </div>
@@ -75,7 +78,7 @@ function LoadingScreen({ onFinish }) {
         </div>
         <p className="loading-percent">{Math.floor(progress)}%</p>
 
-        <div className="loading-footer">Christ University, Bengaluru · Campus Undercover v2.0</div>
+        <div className="loading-footer">Christ University, Bengaluru · Campus Game v2.0</div>
       </div>
     </div>
   )
@@ -107,8 +110,11 @@ function useGameWebSocket(roomCode, playerId) {
   const setGamePhase = useGameStore((s) => s.setGamePhase)
   const addCorrelation = useGameStore((s) => s.addCorrelation)
   const setCctvReport = useGameStore((s) => s.setCctvReport)
+  const pushEvidenceCard = useGameStore((s) => s.pushEvidenceCard)
+  const setSuspectDossier = useGameStore((s) => s.setSuspectDossier)
+  const setMovementTraceReport = useGameStore((s) => s.setMovementTraceReport)
+  const setGlobalTaskPercent = useGameStore((s) => s.setGlobalTaskPercent)
   const token = useGameStore((s) => s.authToken)
-
 
   useEffect(() => {
     if (!roomCode || !playerId) return
@@ -149,10 +155,11 @@ function useGameWebSocket(roomCode, playerId) {
           case 'EVIDENCE_COLLECTED':
             if (payload.evidence) {
               removeWorldEvidence(payload.evidence.evidence_id)
-              if (String(payload.collector_id) === String(playerId)) {
-                incrementEvidenceCollected()
-              }
+              if (String(payload.collector_id) === String(playerId)) incrementEvidenceCollected()
             }
+            break
+          case 'EVIDENCE_CARD':
+            pushEvidenceCard(payload)
             break
           case 'EVIDENCE_APPEARED':
             if (payload.evidence) addWorldEvidence(payload.evidence)
@@ -162,6 +169,12 @@ function useGameWebSocket(roomCode, playerId) {
             break
           case 'EVIDENCE_BOARD_UPDATE':
             setEvidenceBoard(payload.board || [])
+            break
+          case 'SUSPECT_DOSSIER_UPDATE':
+            setSuspectDossier(payload.suspects || [])
+            break
+          case 'MOVEMENT_TRACE_REPORT':
+            setMovementTraceReport(payload)
             break
           case 'TASK_UPDATED': updateTask(payload); break
           case 'NPC_STATEMENT': showNpcDialog({ npc_name: payload.npc_name, statement: payload.statement }); break
@@ -180,9 +193,11 @@ function useGameWebSocket(roomCode, playerId) {
           case 'CORRELATION_RESULT': addCorrelation(payload.evidence_id_a, payload.evidence_id_b, payload); break
           case 'NPC_POSITIONS': setNpcs(payload.npcs || []); break
           case 'TASK_COMPLETED': updateTask(payload.task); break
+          case 'GLOBAL_TASK_PROGRESS': if (payload) setGlobalTaskPercent(payload); break
           case 'ACCUSATION_PHASE': setGamePhase('accusation'); break
           case 'PLAYER_MOVED': if (String(payload.player_id) !== String(playerId)) updateOtherPlayer(payload.player_id, { position: payload.position, rotation: payload.rotation }); break
           case 'PLAYER_DISCONNECTED': removeOtherPlayer(payload.player_id); break
+
           case 'GAME_OVER': setGameResult(payload); break
           default: break
         }
@@ -196,56 +211,89 @@ function useGameWebSocket(roomCode, playerId) {
 
 /* ──────────────────── App Root ──────────────────── */
 export default function App() {
-  const [screen, setScreen] = useState('home') // home | loading | game
-  const gamePhase = useGameStore((s) => s.gamePhase)
-  const setGamePhase = useGameStore((s) => s.setGamePhase)
-  const setRole = useGameStore((s) => s.setRole)
-  const setAbilities = useGameStore((s) => s.setAbilities)
-  const setTasks = useGameStore((s) => s.setTasks)
+  // ── Local screen machine: LOADING → SPLASH → CINEMATIC → GAME
+  // This mirrors the SCREENS enum in gameStore but lives locally to avoid
+  // re-rendering the entire tree on every store update.
+  const [screen, setScreen] = useState('loading')  // loading | splash | cinematic | game
+
+  const gamePhase        = useGameStore((s) => s.gamePhase)
+  const setGamePhase     = useGameStore((s) => s.setGamePhase)
+  const setRole          = useGameStore((s) => s.setRole)
+  const setAbilities     = useGameStore((s) => s.setAbilities)
+  const setTasks         = useGameStore((s) => s.setTasks)
   const setWorldEvidence = useGameStore((s) => s.setWorldEvidence)
-  const setNpcs = useGameStore((s) => s.setNpcs)
-  const roomCode = useGameStore((s) => s.roomCode)
-  const playerId = useGameStore((s) => s.playerId)
+  const setNpcs          = useGameStore((s) => s.setNpcs)
+  const roomCode         = useGameStore((s) => s.roomCode)
+  const playerId         = useGameStore((s) => s.playerId)
+  const setCurrentScreen     = useGameStore((s) => s.setCurrentScreen)
+  const setHasSeenCinematic  = useGameStore((s) => s.setHasSeenCinematic)
 
   useGameWebSocket(screen === 'game' && roomCode ? roomCode : null, playerId)
 
-  const handlePlay = useCallback(() => {
-    setScreen('loading')
-  }, [])
-
+  /* LOADING → SPLASH */
   const handleLoadingFinish = useCallback(() => {
+    setScreen('splash')
+    setCurrentScreen(SCREENS.SPLASH)
+  }, [setCurrentScreen])
+
+  /* SPLASH → STORY CINEMATIC */
+  const handleUnleash = useCallback(() => {
+    setScreen('story_cinematic')
+    setCurrentScreen(SCREENS.STORY_CINEMATIC)
+  }, [setCurrentScreen])
+
+  /* STORY CINEMATIC → CINEMATIC LANDING (HomeScreen) */
+  const handleCinematicComplete = useCallback(() => {
+    setHasSeenCinematic(true)
+    setScreen('cinematic')
+    setCurrentScreen(SCREENS.CINEMATIC)
+  }, [setCurrentScreen, setHasSeenCinematic])
+
+  /* CINEMATIC (HomeScreen lobby flow) → GAME */
+  const handlePlay = useCallback(() => {
     setScreen('game')
+    setCurrentScreen(SCREENS.GAMEPLAY)
     if (!roomCode) {
+      // Offline / solo mode — seed demo state
       setGamePhase('exploration')
       setRole('DETECTIVE')
       setAbilities([
-        { ability_id: 'CCTV_ANALYSIS', name: 'CCTV Analysis', description: 'Review surveillance from Security Office', location_required: 'Security Office', duration_seconds: 90, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
-        { ability_id: 'DIGITAL_ANALYSIS', name: 'Digital Evidence Analysis', description: 'Recover server access logs from Computer Lab', location_required: 'Computer Lab', duration_seconds: 60, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
-        { ability_id: 'RECOVER_LOGS', name: 'Recover Logs', description: 'Recover deleted file metadata from Research Center', location_required: 'Research Center', duration_seconds: 45, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
-        { ability_id: 'CORRELATE_EVIDENCE', name: 'Correlate Evidence', description: 'Link two pieces of evidence on the Evidence Board', location_required: null, duration_seconds: 0, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 10, max_uses: 10 }
+        { ability_id: 'CCTV_ANALYSIS',    name: 'CCTV Analysis',              description: 'Review surveillance from Security Office',       location_required: 'Security Office', duration_seconds: 90, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
+        { ability_id: 'DIGITAL_ANALYSIS', name: 'Digital Evidence Analysis',  description: 'Recover server access logs from Computer Lab',   location_required: 'Computer Lab',    duration_seconds: 60, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
+        { ability_id: 'RECOVER_LOGS',     name: 'Recover Logs',               description: 'Recover deleted file metadata from Research Center', location_required: 'Research Center', duration_seconds: 45, cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 99, max_uses: 99 },
+        { ability_id: 'CORRELATE_EVIDENCE',name:'Correlate Evidence',          description: 'Link two pieces of evidence on the Evidence Board', location_required: null,           duration_seconds: 0,  cooldown_remaining: 0, is_on_cooldown: false, uses_remaining: 10, max_uses: 10 },
       ])
       setTasks([
-        { task_id: 'task_1', name: 'Repair Server Network', location: 'Computer Lab', task_type: 'REPAIR_NETWORK', progress: 0, completed: false, points: 20 },
-        { task_id: 'task_2', name: 'Archive Department Records', location: 'MCA Department', task_type: 'ARCHIVE_FILES', progress: 0, completed: false, points: 15 },
-        { task_id: 'task_3', name: 'Check Security Cameras', location: 'Security Office', task_type: 'CHECK_CCTV', progress: 0, completed: false, points: 10 },
+        { task_id: 'task_1', name: 'Repair Server Network',     location: 'Computer Lab',    task_type: 'REPAIR_NETWORK',  progress: 0, completed: false, points: 20 },
+        { task_id: 'task_2', name: 'Archive Department Records',location: 'MCA Department',  task_type: 'ARCHIVE_FILES',   progress: 0, completed: false, points: 15 },
+        { task_id: 'task_3', name: 'Check Security Cameras',    location: 'Security Office', task_type: 'CHECK_CCTV',      progress: 0, completed: false, points: 10 },
       ])
       setWorldEvidence([
-        { evidence_id: 'ev_1', evidence_type: 'DIGITAL', area_found: 'Computer Lab', description: 'Log file showing unauthorized access at 22:47' },
-        { evidence_id: 'ev_2', evidence_type: 'PHYSICAL', area_found: 'Library', description: 'A dropped notebook with research schematics' },
-        { evidence_id: 'ev_3', evidence_type: 'TESTIMONIAL', area_found: 'Cafeteria', description: 'Student saw someone near the department at 10 PM' },
+        { evidence_id: 'ev_0', evidence_type: 'PHYSICAL',    area_found: 'Junior College', position: { x: 0, y: 0.9, z: -32 }, description: 'Discarded keycard fragment found near entrance.', points_to_player_id: '9001', reliability_score: 0.85 },
+        { evidence_id: 'ev_1', evidence_type: 'DIGITAL',     area_found: 'Computer Lab', description: 'Log file showing unauthorized access at 22:47', points_to_player_id: '9002', reliability_score: 0.90 },
+        { evidence_id: 'ev_2', evidence_type: 'PHYSICAL',    area_found: 'Library',      description: 'A dropped notebook with research schematics', points_to_player_id: '9001', reliability_score: 0.75 },
+        { evidence_id: 'ev_3', evidence_type: 'TESTIMONIAL', area_found: 'Cafeteria',    description: 'Student saw someone near the department at 10 PM', points_to_player_id: '9003', reliability_score: 0.80 },
       ])
+
       setNpcs([
-        { npc_id: 'npc_1', name: 'Prof. Sharma', position: [-15, -15], state: 'idle' },
-        { npc_id: 'npc_2', name: 'Librarian Peter', position: [-15, 15], state: 'idle' },
-        { npc_id: 'npc_3', name: 'Security Guard Suresh', position: [15, -15], state: 'idle' },
+        { npc_id: 'npc_1', name: 'Prof. Sharma',           position: [-15, -15], state: 'idle' },
+        { npc_id: 'npc_2', name: 'Librarian Peter',        position: [-15,  15], state: 'idle' },
+        { npc_id: 'npc_3', name: 'Security Guard Suresh',  position: [ 15, -15], state: 'idle' },
       ])
     }
-  }, [roomCode, setGamePhase, setRole, setAbilities, setTasks, setWorldEvidence, setNpcs])
+  }, [roomCode, setGamePhase, setRole, setAbilities, setTasks, setWorldEvidence, setNpcs, setCurrentScreen])
 
-  const handleBeginInvestigation = useCallback(() => { setGamePhase('exploration') }, [setGamePhase])
+  const handleBeginInvestigation = useCallback(() => {
+    setGamePhase('exploration')
+  }, [setGamePhase])
 
-  if (screen === 'home') return <HomeScreen onPlay={handlePlay} />
-  if (screen === 'loading') return <LoadingScreen onFinish={handleLoadingFinish} />
+  /* ── Render ── */
+  if (screen === 'loading')          return <LoadingScreen    onFinish={handleLoadingFinish} />
+  if (screen === 'splash')           return <SplashScreen     onUnleash={handleUnleash} />
+  if (screen === 'story_cinematic')  return <StoryCinematic   onComplete={handleCinematicComplete} />
+  if (screen === 'cinematic')        return <HomeScreen       onPlay={handlePlay} />
+
+  // GAME branch
   if (gamePhase === 'role_reveal') return <RoleRevealScreen onBegin={handleBeginInvestigation} />
   return <GameScene />
 }

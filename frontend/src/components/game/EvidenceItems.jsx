@@ -83,10 +83,44 @@ function SingleEvidenceItem({ item, index }) {
   })
 
   const handleCollect = () => {
+    const latestPos = useGameStore.getState().playerPosition
+    const posPayload = { x: latestPos[0], y: latestPos[1], z: latestPos[2] }
+
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ action: 'COLLECT_EVIDENCE', evidence_id: item.evidence_id }))
+      ws.send(JSON.stringify({
+        action: 'COLLECT_EVIDENCE',
+        evidence_id: item.evidence_id,
+        position: posPayload,
+      }))
+    } else {
+      // Offline / Guest mode simulation
+      const store = useGameStore.getState()
+      store.removeWorldEvidence(item.evidence_id)
+      store.incrementEvidenceCollected()
+      const role = store.role || 'DETECTIVE'
+
+      const card = {
+        evidence_id: item.evidence_id,
+        template_id: item.template_id || 'clue',
+        evidence_type: item.evidence_type,
+        area: item.area_found || item.area || 'Campus Area',
+        area_found: item.area_found || item.area || 'Campus Area',
+        description: item.description || 'Collected clue file.',
+        points_to_player_id: item.points_to_player_id || 'Suspect #9001',
+        reliability_score: item.reliability_score || 0.85,
+        analyst_note: role === 'DETECTIVE' ? undefined : 'Looks like server metadata. Might mean something.',
+      }
+
+      store.pushEvidenceCard(card)
+      if (role === 'DETECTIVE') {
+        const board = store.evidenceBoard || []
+        if (!board.some((b) => b.evidence_id === card.evidence_id)) {
+          store.setEvidenceBoard([...board, card])
+        }
+      }
     }
   }
+
 
   /* Listen for "E" interact key when near evidence item */
   useEffect(() => {

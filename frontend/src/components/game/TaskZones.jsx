@@ -122,6 +122,11 @@ function SingleTaskZone({ task }) {
   const [showSparkle, setShowSparkle] = useState(false)
   const wasCompleted = useRef(task.completed)
 
+  // Track E-key hold state in a ref to avoid re-render churn inside useFrame.
+  // VirtualControls fires window keydown/keyup with code:'KeyE', so one listener covers both.
+  const isInteracting  = useRef(false)
+  const wasInteracting = useRef(false)   // used to detect the exact release frame
+
   const playerPosition = useGameStore((s) => s.playerPosition)
   const ws             = useGameStore((s) => s.ws)
   const updateTask     = useGameStore((s) => s.updateTask)
@@ -130,6 +135,26 @@ function SingleTaskZone({ task }) {
 
   const [ax, az] = AREA_WORLD_POSITIONS[task.location] || [0, 0]
   const zonePos  = [ax, 0.04, az]
+
+  /* Keydown / keyup listeners — covers keyboard 'e' and VirtualControls KeyE dispatch */
+  useEffect(() => {
+    const onDown = (e) => {
+      if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') {
+        isInteracting.current = true
+      }
+    }
+    const onUp = (e) => {
+      if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') {
+        isInteracting.current = false
+      }
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup',   onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup',   onUp)
+    }
+  }, [])
 
   /* Detect task completion → trigger sparkle once */
   useEffect(() => {
@@ -146,37 +171,36 @@ function SingleTaskZone({ task }) {
   const dist   = Math.sqrt(dx * dx + dz * dz)
   const isInZone = dist < 3.5
 
-  /* Task heartbeat — sends progress every frame while in zone */
+  const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
+  const openMinigame         = useGameStore((s) => s.openMinigame)
+
+  /* Trigger minigame modal when E is pressed in zone */
   useFrame((_, delta) => {
     const t = Date.now() * 0.001
 
     if (ringRef.current) {
+      const interactPulse = isInZone && isInteracting.current
       ringRef.current.rotation.y = t * 0.45
-      const pulse = isInZone ? 1 + Math.sin(t * 5) * 0.06 : 1.0
+      const pulse = interactPulse ? 1 + Math.sin(t * 8) * 0.09 : isInZone ? 1 + Math.sin(t * 5) * 0.06 : 1.0
       ringRef.current.scale.setScalar(pulse)
     }
     if (innerRef.current) {
       innerRef.current.rotation.y = -t * 0.7
     }
-    /* Icon plane slowly rotates to face camera — simple billboard Y spin */
     if (iconPlaneRef.current) {
       iconPlaneRef.current.rotation.y = t * 0.3
     }
 
-    /* Progress heartbeat */
-    if (isInZone && !task.completed && ws) {
-      ws.send(JSON.stringify({
-        action:  'TASK_PROGRESS',
-        task_id: task.task_id,
-        delta:   delta * (1 / (task.duration_seconds || 30)),
-      }))
+    /* Open minigame modal when player holds E in zone */
+    if (isInZone && isInteracting.current && !task.completed && !activeMinigameTask) {
+      openMinigame(task)
     }
   })
 
   if (task.completed && !showSparkle) return null
 
   const icon    = TASK_ICONS[task.task_type] || TASK_ICONS.DEFAULT
-  const ringCol = isInZone ? '#22c55e' : '#f59e0b'
+  const ringCol = isInZone ? (isInteracting.current ? '#a78bfa' : '#22c55e') : '#f59e0b'
 
   return (
     <group position={zonePos}>
@@ -210,6 +234,15 @@ function SingleTaskZone({ task }) {
             </div>
             <div className="waypoint-distance">{Math.round(dist)}m</div>
             <div className="waypoint-arrow">▼</div>
+          </div>
+        </Html>
+      )}
+
+      {/* ── "Hold E" HUD prompt — visible only when inside zone and not done ── */}
+      {isInZone && !task.completed && (
+        <Html position={[0, 2.0, 0]} center distanceFactor={10}>
+          <div className="task-interact-prompt">
+            {isInteracting.current ? '⚡ Interacting…' : '[ E ] Hold to interact'}
           </div>
         </Html>
       )}

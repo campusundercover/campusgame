@@ -6,6 +6,11 @@ import ChatPanel from './ChatPanel'
 import AbilityMenu from './AbilityMenu'
 import VirtualControls from './VirtualControls'
 import CCTVReportPanel from './CCTVReportPanel'
+import EvidenceCardPopup from './EvidenceCardPopup'
+import PersonalEvidenceLogPanel from './PersonalEvidenceLogPanel'
+import MovementTraceReportPanel from './MovementTraceReportPanel'
+
+
 
 /* ── Christ University Campus Minimap ── */
 // Faithfully represents the aerial photo layout
@@ -497,6 +502,32 @@ function ControlsHint() {
   )
 }
 
+/* ── Global Task Progress Bar ── */
+function GlobalTaskProgressBar() {
+  const globalTaskPercent = useGameStore((s) => s.globalTaskPercent) || 0
+  const globalTaskCompleted = useGameStore((s) => s.globalTaskCompleted) || 0
+  const globalTaskTotal = useGameStore((s) => s.globalTaskTotal) || 0
+
+  const percentClamped = Math.min(100, Math.max(0, globalTaskPercent))
+
+  return (
+    <div className="hud-global-task-progress" id="global-task-progress">
+      <div className="global-task-header">
+        <span className="global-task-label">CAMPUS TASKS</span>
+        <span className="global-task-stats">
+          {globalTaskTotal > 0 ? `${globalTaskCompleted}/${globalTaskTotal} (${Math.round(percentClamped)}%)` : `${Math.round(percentClamped)}%`}
+        </span>
+      </div>
+      <div className="global-task-bar-track">
+        <div 
+          className="global-task-bar-fill" 
+          style={{ width: `${percentClamped}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 /* ── Full HUD ── */
 export default function GameHUD() {
   return (
@@ -504,6 +535,7 @@ export default function GameHUD() {
       <div className="hud-top-bar">
         <RoleBadge />
         <Timer />
+        <GlobalTaskProgressBar />
         <AreaIndicator />
       </div>
 
@@ -511,6 +543,7 @@ export default function GameHUD() {
       <div className="hud-right-sidebar">
         <TaskList />
         <EvidenceBoard />
+        <PersonalEvidenceLogPanel />
       </div>
 
       <div className="hud-bottom-bar">
@@ -525,6 +558,10 @@ export default function GameHUD() {
 
       <NPCDialog />
       <CCTVReportPanel />
+      <MovementTraceReportPanel />
+      <EvidenceCardPopup />
     </div>
   )
 }
+
+

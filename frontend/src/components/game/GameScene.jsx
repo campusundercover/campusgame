@@ -9,6 +9,7 @@ import GameHUD from '../ui/GameHUD'
 import MeetingScreen from '../ui/MeetingScreen'
 import AccusationScreen from '../ui/AccusationScreen'
 import ResultsScreen from '../ui/ResultsScreen'
+import TaskMinigame from '../ui/TaskMinigame'
 import useGameStore from '../../store/gameStore'
 
 function SceneLoader() {
@@ -91,6 +92,7 @@ export default function GameScene() {
       <GameHUD />
 
       {/* Modal Overlays */}
+      <TaskMinigame />
       <MeetingScreen />
       <AccusationScreen />
       <ResultsScreen />

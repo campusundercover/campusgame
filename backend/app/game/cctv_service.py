@@ -117,6 +117,55 @@ class CCTVAnalysisEngine:
         """Return all recorded movements for an area (anonymized)."""
         return [e for e in self.movement_log if e['area'] == area]
 
+    def generate_movement_trace(
+        self,
+        requested_area: str,
+        time_window_minutes: int,
+        current_game_time: float,
+        player_id_lookup: Dict[int, str],
+    ) -> Dict:
+        """
+        Same filtering logic as generate_cctv_report, but returns REAL player_id instead of color_index.
+        """
+        window_start = current_game_time - (time_window_minutes * 60)
+
+        relevant = [
+            e for e in self.movement_log
+            if e['area'] == requested_area and e['timestamp'] >= window_start
+        ]
+
+        identified_presence = []
+        by_color = {}
+        for e in relevant:
+            ci = e['color_index']
+            by_color.setdefault(ci, []).append(e)
+
+        for color_index, entries in by_color.items():
+            player_id = player_id_lookup.get(color_index)
+            if not player_id:
+                continue
+            timestamps = [e['timestamp'] for e in entries]
+            first_seen = min(timestamps)
+            last_seen = max(timestamps)
+            duration_seconds = len(entries) * 5
+
+            identified_presence.append({
+                'player_id': str(player_id),
+                'color_index': color_index,
+                'area': requested_area,
+                'duration_seconds': duration_seconds,
+                'first_seen': int(first_seen),
+                'last_seen': int(last_seen),
+            })
+
+        return {
+            'area': requested_area,
+            'time_window_minutes': time_window_minutes,
+            'identified_presence': identified_presence,
+            'analysis_complete': True,
+        }
+
+
 
 # ── Room-keyed registry ────────────────────────────────────────────────────
 
