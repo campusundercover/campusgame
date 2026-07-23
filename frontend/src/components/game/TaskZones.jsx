@@ -174,7 +174,7 @@ function SingleTaskZone({ task }) {
   const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
   const openMinigame         = useGameStore((s) => s.openMinigame)
 
-  /* Trigger minigame modal when E is pressed in zone */
+  /* Task interaction & progress streaming */
   useFrame((_, delta) => {
     const t = Date.now() * 0.001
 
@@ -191,10 +191,40 @@ function SingleTaskZone({ task }) {
       iconPlaneRef.current.rotation.y = t * 0.3
     }
 
-    /* Open minigame modal when player holds E in zone */
-    if (isInZone && isInteracting.current && !task.completed && !activeMinigameTask) {
-      openMinigame(task)
+    const activeNow = isInZone && isInteracting.current && !task.completed
+
+    /* Stream task progress when holding E inside zone */
+    if (activeNow) {
+      if (ws) {
+        ws.send(JSON.stringify({
+          action:  'TASK_PROGRESS',
+          task_id: task.task_id,
+          delta:   delta * 0.35, // ~3 seconds to fill 100%
+        }))
+      } else {
+        const next = Math.min(1.0, (task.progress || 0) + delta * 0.35)
+        updateTask({ ...task, progress: next, completed: next >= 1.0 })
+      }
+
+      /* Also open minigame modal if not already open */
+      if (!activeMinigameTask) {
+        openMinigame(task)
+      }
     }
+
+    /* Send TASK_RESET when E is released or player exits zone before completion */
+    if (wasInteracting.current && !activeNow && !task.completed) {
+      if (ws) {
+        ws.send(JSON.stringify({
+          action:  'TASK_RESET',
+          task_id: task.task_id,
+        }))
+      } else {
+        updateTask({ ...task, progress: 0.0 })
+      }
+    }
+
+    wasInteracting.current = !!activeNow
   })
 
   if (task.completed && !showSparkle) return null

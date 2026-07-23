@@ -258,25 +258,56 @@ function HoldBarGame({ onSuccess, onCancel, task }) {
   const [isSuccess, setIsSuccess] = useState(false)
   const animRef = useRef(null)
 
+  /* Keydown/keyup listener for E and Space keys */
+  useEffect(() => {
+    const onDown = (e) => {
+      if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E' || e.code === 'Space') {
+        if (!isSuccess) setIsHolding(true)
+      }
+    }
+    const onUp = (e) => {
+      if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E' || e.code === 'Space') {
+        if (!isSuccess) setIsHolding(false)
+      }
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup',   onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup',   onUp)
+    }
+  }, [isSuccess])
+
   useEffect(() => {
     if (isHolding && !isSuccess) {
       animRef.current = setInterval(() => {
         setProgress(p => {
-          const next = p + 2.5
+          const next = p + 3.0
           if (next >= 100) {
             clearInterval(animRef.current)
             setIsSuccess(true)
-            setTimeout(() => onSuccess(), 800)
+            setTimeout(() => onSuccess(), 600)
             return 100
           }
           return next
         })
-      }, 50)
+      }, 40)
+    } else if (!isHolding && !isSuccess && progress > 0) {
+      animRef.current = setInterval(() => {
+        setProgress(p => {
+          const next = Math.max(0, p - 4.0)
+          if (next <= 0) {
+            clearInterval(animRef.current)
+            return 0
+          }
+          return next
+        })
+      }, 40)
     } else {
       clearInterval(animRef.current)
     }
     return () => clearInterval(animRef.current)
-  }, [isHolding, isSuccess, onSuccess])
+  }, [isHolding, isSuccess, progress, onSuccess])
 
   const handleHoldStart = () => { if (!isSuccess) setIsHolding(true) }
   const handleHoldEnd = () => { if (!isSuccess) setIsHolding(false) }

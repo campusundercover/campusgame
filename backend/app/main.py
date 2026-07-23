@@ -841,13 +841,11 @@ async def websocket_game_endpoint(websocket: WebSocket, room_code: str, player_i
                         })
                         continue
 
-                # 2. Clamp delta to prevent inflated progress for small ticks, but allow delta >= 0.9 for minigame completion.
+                # 2. Clamp delta per call to 0.25 max for normal ticks, or 1.0 for minigame completion
                 if raw_delta >= 0.9:
                     delta = 1.0
                 else:
-                    duration = max(1, task_obj.duration_seconds)
-                    max_delta = 1.0 / (duration * 2)
-                    delta = min(raw_delta, max_delta)
+                    delta = min(raw_delta, 0.25)
 
                 updated = task_manager.update_task_progress(room_code, pid_str, task_id, delta)
                 if updated:
