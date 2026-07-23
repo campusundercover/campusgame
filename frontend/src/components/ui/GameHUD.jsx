@@ -9,6 +9,7 @@ import CCTVReportPanel from './CCTVReportPanel'
 import EvidenceCardPopup from './EvidenceCardPopup'
 import PersonalEvidenceLogPanel from './PersonalEvidenceLogPanel'
 import MovementTraceReportPanel from './MovementTraceReportPanel'
+import TaskCompass from './TaskCompass'
 
 
 
@@ -528,6 +529,51 @@ function GlobalTaskProgressBar() {
   )
 }
 
+/* Area → world [x, z] coordinates for arrival check */
+const AREA_ZONE_COORDS = {
+  'Research Center':  [28, -20],
+  'Computer Lab':     [28,   0],
+  'Security Office':  [-30,  4],
+  'MCA Department':   [ 8,  14],
+  'Main Block':       [-10, -8],
+  'Auditorium':       [-28,-28],
+  'Library':          [-24, 22],
+  'Cafeteria':        [ 32, 16],
+}
+
+/* ── 2D Objective Arrival Banner ── */
+function ObjectiveArrivalBanner() {
+  const playerPosition = useGameStore((s) => s.playerPosition)
+  const activeTaskId = useGameStore((s) => s.activeTaskId)
+  const taskStartedId = useGameStore((s) => s.taskStartedId)
+  const tasks = useGameStore((s) => s.tasks)
+
+  const trackedTaskId = taskStartedId || activeTaskId
+  const trackedTask = tasks.find(t => t.task_id === trackedTaskId && !t.completed)
+
+  if (!trackedTask || !playerPosition) return null
+
+  const targetCoords = AREA_ZONE_COORDS[trackedTask.location]
+  if (!targetCoords) return null
+
+  const dx = targetCoords[0] - playerPosition[0]
+  const dz = targetCoords[1] - playerPosition[2]
+  const distance = Math.sqrt(dx * dx + dz * dz)
+  const isInZone = distance < 3.5
+
+  if (!isInZone) return null
+
+  return (
+    <div className="objective-arrival-banner" id="objective-arrival-banner">
+      <span className="banner-icon">🎯</span>
+      <div className="banner-text-group">
+        <strong className="banner-title">OBJECTIVE REACHED — {trackedTask.name}</strong>
+        <p className="banner-sub">Hold <kbd>E</kbd> (or tap interact) to perform task</p>
+      </div>
+    </div>
+  )
+}
+
 /* ── Full HUD ── */
 export default function GameHUD() {
   return (
@@ -538,6 +584,9 @@ export default function GameHUD() {
         <GlobalTaskProgressBar />
         <AreaIndicator />
       </div>
+
+      <TaskCompass />
+      <ObjectiveArrivalBanner />
 
       {/* Right sidebar */}
       <div className="hud-right-sidebar">

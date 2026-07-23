@@ -2133,6 +2133,134 @@ p.subtitle {
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.18);
 }
 
+/* ── Task Compass HUD Element ── */
+.hud-task-compass {
+  position: absolute;
+  top: 70px;
+  left: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 8px 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+.compass-arrow-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease-out;
+  filter: drop-shadow(0 0 6px #8b5cf6);
+}
+
+.compass-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compass-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compass-task-name {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.compass-distance {
+  font-family: monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #a78bfa;
+}
+
+.compass-location {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Objective Arrival 2D Banner ── */
+.objective-arrival-banner {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(6, 78, 59, 0.9);
+  border: 1.5px solid #10b981;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 10px 20px;
+  border-radius: 999px;
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
+  animation: banner-slide-down 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes banner-slide-down {
+  from { opacity: 0; transform: translate(-50%, -15px) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1.0); }
+}
+
+.banner-icon {
+  font-size: 1.3rem;
+  animation: icon-bounce 1s infinite alternate;
+}
+
+@keyframes icon-bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+
+.banner-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.banner-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.04em;
+}
+
+.banner-sub {
+  font-size: 0.7rem;
+  color: #a7f3d0;
+  margin: 0;
+}
+
+/* Arrived waypoint badge in 3D scene */
+.game-waypoint-marker.arrived {
+  background: rgba(6, 78, 59, 0.95);
+  border-color: #10b981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+}
+
+.task-interact-prompt.arrived-prompt {
+  background: rgba(6, 78, 59, 0.92);
+  border-color: #10b981;
+  color: #a7f3d0;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.5);
+}
+
 .global-task-label {
   color: #94a3b8;
   font-weight: 700;

@@ -113,6 +113,30 @@ function CompletionSparkle({ position }) {
   )
 }
 
+/* ── Bright single ring pulse when player enters zone ── */
+function ArrivalPulse({ position }) {
+  const [life, setLife] = useState(1.0)
+
+  useFrame((_, delta) => {
+    setLife(l => Math.max(0, l - delta * 1.5))
+  })
+
+  if (life <= 0) return null
+
+  return (
+    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[2.5, 3.5, 48]} />
+      <meshBasicMaterial
+        color="#10b981"
+        transparent
+        opacity={life * 0.9}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
 /* ── Single Task Zone ── */
 function SingleTaskZone({ task }) {
   const ringRef      = useRef()
@@ -120,6 +144,7 @@ function SingleTaskZone({ task }) {
   const iconPlaneRef = useRef()
 
   const [showSparkle, setShowSparkle] = useState(false)
+  const [showArrivalPulse, setShowArrivalPulse] = useState(false)
   const wasCompleted = useRef(task.completed)
 
   // Track E-key hold state in a ref to avoid re-render churn inside useFrame.
@@ -135,6 +160,30 @@ function SingleTaskZone({ task }) {
 
   const [ax, az] = AREA_WORLD_POSITIONS[task.location] || [0, 0]
   const zonePos  = [ax, 0.04, az]
+
+  const dx     = playerPosition[0] - ax
+  const dz     = playerPosition[2] - az
+  const dist   = Math.sqrt(dx * dx + dz * dz)
+  const isInZone = dist < 3.5
+
+  const taskStartedId        = useGameStore((s) => s.taskStartedId)
+  const setTaskStarted       = useGameStore((s) => s.setTaskStarted)
+  const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
+  const openMinigame         = useGameStore((s) => s.openMinigame)
+
+  const isStarted = taskStartedId === task.task_id
+  const isTracked = (isStarted || activeTaskId === task.task_id) && !task.completed
+  const wasInZone = useRef(isInZone)
+
+  /* Trigger on-enter arrival pulse when player steps into zone */
+  useEffect(() => {
+    if (isInZone && !wasInZone.current && isTracked) {
+      setShowArrivalPulse(true)
+      const t = setTimeout(() => setShowArrivalPulse(false), 800)
+      return () => clearTimeout(t)
+    }
+    wasInZone.current = isInZone
+  }, [isInZone, isTracked])
 
   /* Keydown / keyup listeners — covers keyboard 'e' and VirtualControls KeyE dispatch */
   useEffect(() => {
@@ -165,18 +214,6 @@ function SingleTaskZone({ task }) {
       return () => clearTimeout(t)
     }
   }, [task.completed])
-
-  const dx     = playerPosition[0] - ax
-  const dz     = playerPosition[2] - az
-  const dist   = Math.sqrt(dx * dx + dz * dz)
-  const isInZone = dist < 3.5
-
-  const taskStartedId        = useGameStore((s) => s.taskStartedId)
-  const setTaskStarted       = useGameStore((s) => s.setTaskStarted)
-  const activeMinigameTask = useGameStore((s) => s.activeMinigameTask)
-  const openMinigame         = useGameStore((s) => s.openMinigame)
-
-  const isStarted = taskStartedId === task.task_id
 
   /* Clear taskStartedId if player walks away from zone or task completes */
   useEffect(() => {
@@ -246,42 +283,52 @@ function SingleTaskZone({ task }) {
 
   if (task.completed && !showSparkle) return null
 
-  const icon    = TASK_ICONS[task.task_type] || TASK_ICONS.DEFAULT
-  const ringCol = isStarted
-    ? (isInZone ? (isInteracting.current ? '#a78bfa' : '#22c55e') : '#f59e0b')
-    : '#475569'
+  const roleKey = (role && TASK_NAMES[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
+  const ringCol = isInZone ? '#10b981' : (isStarted ? '#f59e0b' : '#475569')
 
   return (
     <group position={zonePos}>
       {/* ── Completion sparkle ── */}
       {showSparkle && <CompletionSparkle position={[0, 0.1, 0]} />}
 
-      {/* ── AAA Dynamic Waypoint Light Beacon ── */}
-      {activeTaskId === task.task_id && !task.completed && (
-        <mesh position={[0, 15, 0]}>
-          <cylinderGeometry args={[0.15, 0.25, 30, 16, 1, true]} />
-          <meshBasicMaterial
-            color="#8b5cf6"
-            transparent
-            opacity={0.22 + Math.sin(Date.now() * 0.005) * 0.08}
-            blending={THREE.AdditiveBlending}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-          />
-        </mesh>
+      {/* ── On-Enter Arrival Pulse ── */}
+      {showArrivalPulse && <ArrivalPulse position={[0, 0.08, 0]} />}
+
+      {/* ── Sky-High Always-Visible Light Pillar for Tracked Task ── */}
+      {isTracked && (
+        <group position={[0, 0, 0]}>
+          <mesh position={[0, 30, 0]}>
+            <cylinderGeometry args={[0.3, 0.6, 60, 16, 1, true]} />
+            <meshBasicMaterial
+              color={isInZone ? "#10b981" : "#a78bfa"}
+              transparent
+              opacity={0.35 + Math.sin(Date.now() * 0.006) * 0.12}
+              blending={THREE.AdditiveBlending}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+            <ringGeometry args={[3.2, 4.2, 48]} />
+            <meshBasicMaterial
+              color={isInZone ? "#10b981" : "#8b5cf6"}
+              transparent
+              opacity={0.4 + Math.sin(Date.now() * 0.006) * 0.15}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
       )}
 
       {/* ── 3D Waypoint UI Badge ── */}
-      {activeTaskId === task.task_id && !task.completed && (
-        <Html position={[0, 4.0, 0]} center distanceFactor={14}>
-          <div className="game-waypoint-marker">
+      {isTracked && (
+        <Html position={[0, 4.5, 0]} center distanceFactor={14}>
+          <div className={`game-waypoint-marker ${isInZone ? 'arrived' : ''}`}>
             <div className="waypoint-label">
-              {(() => {
-                const roleKey = (role && TASK_NAMES[role.toUpperCase()]) ? role.toUpperCase() : 'INVESTIGATOR'
-                return TASK_NAMES[roleKey][task.task_type] || task.name
-              })()}
+              {isInZone ? "🎯 YOU'VE ARRIVED" : (TASK_NAMES[roleKey][task.task_type] || task.name)}
             </div>
-            <div className="waypoint-distance">{Math.round(dist)}m</div>
+            <div className="waypoint-distance">{isInZone ? "HERE!" : `${Math.round(dist)}m`}</div>
             <div className="waypoint-arrow">▼</div>
           </div>
         </Html>
@@ -289,9 +336,9 @@ function SingleTaskZone({ task }) {
 
       {/* ── "Hold E" HUD prompt — visible ONLY when task is started, inside zone, and not done ── */}
       {isStarted && isInZone && !task.completed && (
-        <Html position={[0, 2.0, 0]} center distanceFactor={10}>
-          <div className="task-interact-prompt">
-            {isInteracting.current ? '⚡ Interacting…' : '[ E ] Hold to interact'}
+        <Html position={[0, 2.2, 0]} center distanceFactor={10}>
+          <div className="task-interact-prompt arrived-prompt">
+            {isInteracting.current ? '⚡ Interacting…' : '🎯 You\'ve Arrived — Hold [E]'}
           </div>
         </Html>
       )}
