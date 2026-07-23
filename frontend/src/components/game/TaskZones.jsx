@@ -228,21 +228,40 @@ function SingleTaskZone({ task }) {
     }
   }, [task.completed, isStarted, setTaskStarted])
 
+  const floorDiscRef  = useRef()
+  const accentBeamRef = useRef()
+
   /* Task interaction & progress streaming — only active if player clicked "START TASK" first */
   useFrame((_, delta) => {
     const t = Date.now() * 0.001
+    const currentRingCol = isStarted
+      ? (isInZone ? (isInteracting.current ? '#a78bfa' : '#10b981') : '#f59e0b')
+      : '#475569'
 
-    if (ringRef.current) {
+    if (ringRef.current && ringRef.current.material) {
       const interactPulse = isStarted && isInZone && isInteracting.current
       ringRef.current.rotation.y = t * 0.45
       const pulse = interactPulse ? 1 + Math.sin(t * 8) * 0.09 : (isStarted && isInZone) ? 1 + Math.sin(t * 5) * 0.06 : 1.0
       ringRef.current.scale.setScalar(pulse)
+      ringRef.current.material.color.set(currentRingCol)
+      ringRef.current.material.opacity = isInZone ? 0.75 : (isStarted ? 0.45 : 0.22)
     }
-    if (innerRef.current) {
+    if (innerRef.current && innerRef.current.material) {
       innerRef.current.rotation.y = -t * 0.7
+      innerRef.current.material.color.set(currentRingCol)
+      innerRef.current.material.opacity = isInZone ? 0.55 : (isStarted ? 0.3 : 0.12)
     }
-    if (iconPlaneRef.current) {
+    if (floorDiscRef.current && floorDiscRef.current.material) {
+      floorDiscRef.current.material.color.set(currentRingCol)
+      floorDiscRef.current.material.opacity = isInZone ? 0.18 : 0.04
+    }
+    if (accentBeamRef.current && accentBeamRef.current.material) {
+      accentBeamRef.current.material.color.set(currentRingCol)
+      accentBeamRef.current.material.opacity = isInZone ? 0.65 : (isStarted ? 0.35 : 0.15)
+    }
+    if (iconPlaneRef.current && iconPlaneRef.current.material) {
       iconPlaneRef.current.rotation.y = t * 0.3
+      iconPlaneRef.current.material.emissive.set(currentRingCol)
     }
 
     const activeNow = isStarted && isInZone && isInteracting.current && !task.completed
@@ -368,7 +387,7 @@ function SingleTaskZone({ task }) {
       </mesh>
 
       {/* ── Floor fill disc ── */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={floorDiscRef} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[2.5, 64]} />
         <meshBasicMaterial
           color={ringCol}
@@ -380,7 +399,7 @@ function SingleTaskZone({ task }) {
       </mesh>
 
       {/* ── Vertical accent beam ── */}
-      <mesh position={[0, 1.6, 0]}>
+      <mesh ref={accentBeamRef} position={[0, 1.6, 0]}>
         <cylinderGeometry args={[0.04, 0.04, 3.2, 8]} />
         <meshBasicMaterial
           color={ringCol}
