@@ -6739,3 +6739,93 @@ p.subtitle {
   .sc-chapter-title     { font-size: clamp(26px, 7vw, 48px); }
 }
 
+/* ── Comprehensive Mobile Responsiveness (max-width: 768px) ── */
+@media (max-width: 768px) {
+  /* Game HUD Container */
+  .game-hud {
+    padding: 0.5rem;
+  }
+  
+  /* Top Bar Adjustments */
+  .hud-top-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+  }
+  .hud-role-badge {
+    min-width: 90px;
+    padding: 0.4rem 0.6rem;
+  }
+  .role-name {
+    font-size: 0.8rem;
+  }
+  .hud-timer {
+    padding: 0.4rem 0.8rem;
+  }
+  .timer-value {
+    font-size: 1.25rem;
+  }
+  
+  /* Right Sidebar (Task List, Evidence, etc.) */
+  .hud-right-sidebar {
+    position: absolute;
+    top: auto;
+    bottom: 6rem; /* Above minimap */
+    right: 0.5rem;
+    left: 0.5rem;
+    width: calc(100% - 1rem);
+    max-height: 40vh;
+    z-index: 90;
+  }
+  
+  /* Task List scaling */
+  .task-list-panel {
+    padding: 0.8rem;
+    max-height: 100%;
+  }
+  .task-card-title {
+    font-size: 0.7rem;
+  }
+  
+  /* Bottom Bar & Minimap scaling */
+  .hud-bottom-bar {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .hud-minimap {
+    width: 100px;
+    height: 100px;
+  }
+  
+  /* Hide PC keyboard controls on mobile */
+  .hud-controls {
+    display: none !important;
+  }
+  
+  /* Glass Panels (Menus, Loading) */
+  .glass-panel {
+    width: 95%;
+    padding: 1.5rem;
+    margin: 0 auto;
+  }
+  
+  /* Typography Scaling */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  p.subtitle { font-size: 0.75rem; }
+  
+  /* Prevent mobile browser bounce & scrolling */
+  body, html {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+
